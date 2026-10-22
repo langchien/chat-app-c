@@ -1,0 +1,24 @@
+# Build artifacts
+*.o
+*.exe
+server
+client
+
+# Storage (runtime data)
+storage/chat_server.db
+storage/server_uploads/
+storage/client_downloads/
+
+# User data
+users.txt
+
+# OS / Editor files
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Binary / document files
+*.docx
