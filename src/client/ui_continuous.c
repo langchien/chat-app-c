@@ -53,6 +53,7 @@ void show_help(void) {
         printf("  %s/group <nhóm> <tin_nhắn>%s: Gửi tin nhắn vào một nhóm\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/groups%s                 : Xem danh sách các nhóm đang hoạt động\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/members <nhóm>%s         : Xem danh sách thành viên trong nhóm\n", COLOR_BOLD, COLOR_RESET);
+        printf("  %s/history <user/nhóm> [n]%s : Xem lịch sử tin nhắn lưu trữ từ SQLite3\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/logout%s                 : Đăng xuất tài khoản\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/help%s                   : Hiển thị lại hướng dẫn này\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/quit%s                   : Thoát chương trình\n", COLOR_BOLD, COLOR_RESET);
@@ -180,6 +181,43 @@ void handle_server_line(char *line) {
         g_username[0] = '\0';
         g_chat_partner[0] = '\0';
         printf("\r\033[K%s[THÀNH CÔNG] Đã đăng xuất khỏi hệ thống.%s\n", COLOR_GREEN, COLOR_RESET);
+    } else if (strncmp(line, RESP_HISTORY_START " ", strlen(RESP_HISTORY_START) + 1) == 0) {
+        char *target = line + strlen(RESP_HISTORY_START) + 1;
+        printf("\r\033[K%s==== LỊCH SỬ TIN NHẮN VỚI '%s' ====%s\n", COLOR_CYAN, target, COLOR_RESET);
+    } else if (strncmp(line, RESP_HISTORY_ITEM " ", strlen(RESP_HISTORY_ITEM) + 1) == 0) {
+        char *payload = line + strlen(RESP_HISTORY_ITEM) + 1;
+        /* format: <timestamp> <sender> <content> */
+        char date[16] = {0}, time_str[16] = {0}, sender[MAX_NAME_LEN] = {0};
+        int offset = 0;
+        if (sscanf(payload, "%15s %15s %31s%n", date, time_str, sender, &offset) >= 3) {
+            char *msg = trim_whitespace(payload + offset);
+            printf("\r\033[K%s[%s %s] %s%s:%s %s\n", COLOR_BLUE, date, time_str, COLOR_BOLD, sender, COLOR_RESET, msg);
+        } else {
+            printf("\r\033[K%s[LỊCH SỬ] %s%s\n", COLOR_BLUE, payload, COLOR_RESET);
+        }
+    } else if (strncmp(line, RESP_HISTORY_END " ", strlen(RESP_HISTORY_END) + 1) == 0) {
+        char target[MAX_NAME_LEN] = {0};
+        int count = 0;
+        sscanf(line + strlen(RESP_HISTORY_END) + 1, "%31s %d", target, &count);
+        printf("\r\033[K%s==== Đã tải %d tin nhắn lịch sử của '%s' ====%s\n", COLOR_CYAN, count, target, COLOR_RESET);
+    } else if (strncmp(line, RESP_OFFLINE_START " ", strlen(RESP_OFFLINE_START) + 1) == 0) {
+        int count = atoi(line + strlen(RESP_OFFLINE_START) + 1);
+        printf("\r\033[K%s[HỘP THƯ NGOẠI TUYẾN] Bạn có %d tin nhắn mới khi vắng mặt:%s\n", COLOR_YELLOW, count, COLOR_RESET);
+    } else if (strncmp(line, RESP_OFFLINE_MSG " ", strlen(RESP_OFFLINE_MSG) + 1) == 0) {
+        char *payload = line + strlen(RESP_OFFLINE_MSG) + 1;
+        char sender[MAX_NAME_LEN] = {0}, date[16] = {0}, time_str[16] = {0};
+        int offset = 0;
+        if (sscanf(payload, "%31s %15s %15s%n", sender, date, time_str, &offset) >= 3) {
+            char *msg = trim_whitespace(payload + offset);
+            printf("\r\033[K%s[NGOẠI TUYẾN - %s %s] %s%s:%s %s\n", COLOR_YELLOW, date, time_str, COLOR_BOLD, sender, COLOR_RESET, msg);
+        } else {
+            printf("\r\033[K%s[NGOẠI TUYẾN] %s%s\n", COLOR_YELLOW, payload, COLOR_RESET);
+        }
+    } else if (strcmp(line, RESP_OFFLINE_END) == 0) {
+        printf("\r\033[K%s--- Đã nạp xong toàn bộ tin nhắn ngoại tuyến ---%s\n", COLOR_YELLOW, COLOR_RESET);
+    } else if (strncmp(line, EVENT_TYPING " ", strlen(EVENT_TYPING) + 1) == 0) {
+        char *sender = line + strlen(EVENT_TYPING) + 1;
+        printf("\r\033[K%s... '%s' đang soạn tin nhắn ...%s\n", COLOR_BLUE, sender, COLOR_RESET);
     } else if (strncmp(line, RESP_OK, strlen(RESP_OK)) == 0) {
         char *detail = line + strlen(RESP_OK);
         if (*detail == ' ') detail++;
@@ -373,6 +411,25 @@ void handle_user_input(char *raw_input) {
             }
             char buf[128];
             snprintf(buf, sizeof(buf), "%s %s", CMD_MEMBERS, gname);
+            send_to_server(buf);
+            return;
+        }
+
+        if (strcasecmp(cmd, "/history") == 0) {
+            char target[MAX_NAME_LEN] = {0};
+            int limit = DEFAULT_HISTORY_LIMIT;
+            int args = sscanf(rest, "%31s %d", target, &limit);
+            if (args < 1) {
+                if (strlen(g_chat_partner) > 0) {
+                    safe_copy(target, g_chat_partner, sizeof(target));
+                } else {
+                    printf("%s[LỖI] Cú pháp: /history <username/tên_nhóm> [số_lượng]%s\n", COLOR_RED, COLOR_RESET);
+                    print_prompt();
+                    return;
+                }
+            }
+            char buf[128];
+            snprintf(buf, sizeof(buf), "%s %s %d", CMD_HISTORY, target, limit);
             send_to_server(buf);
             return;
         }

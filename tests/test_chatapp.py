@@ -10,6 +10,14 @@ SERVER_CMD = ["./server", str(SERVER_PORT)]
 
 def start_server():
     cwd = "." if os.path.exists("./server") or os.path.exists("./Makefile") else "./chat-app"
+    db_file = os.path.join(cwd, "storage", "chat_server.db")
+    for ext in ["", "-wal", "-shm"]:
+        f = db_file + ext
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except Exception:
+                pass
     p = subprocess.Popen(SERVER_CMD, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     time.sleep(0.6)
     return p
@@ -156,8 +164,73 @@ def run_tests():
         print("C1 logout res:", res_logout)
         assert any("Logged out" in l for l in res_logout), "Expected Logged out"
 
+        # ========================================================
+        # Milestone 3 Tests: Realtime Presence, Groups, History, Offline
+        # ========================================================
+        print("\n>>> Testing Milestone 3 Features (History & Offline sync)...")
+
+        # Test 10: Login alice again
+        send_line(c1, "LOGIN alice 123456")
+        res_login_c1 = recv_line(c1)
+        print("C1 re-login res:", res_login_c1)
+        assert any("LOGIN_OK alice" in l for l in res_login_c1)
+
+        # Test 11: 1-1 History command
+        send_line(c1, "HISTORY eve 10")
+        res_hist = recv_line(c1)
+        print("C1 history with eve:", res_hist)
+        assert any("HISTORY_START eve" in l for l in res_hist), "Expected HISTORY_START eve"
+        assert any("Hello Eve!" in l for l in res_hist), "Expected past 1-1 message in history"
+        assert any("HISTORY_END eve" in l for l in res_hist), "Expected HISTORY_END eve"
+
+        # Test 12: Group History command & Group List
+        send_line(c1, "GROUPS")
+        res_groups = recv_line(c1)
+        print("C1 groups list:", res_groups)
+        assert any("group_test" in l for l in res_groups), "Expected group_test in GROUPS"
+
+        send_line(c1, "MEMBERS group_test")
+        res_members = recv_line(c1)
+        print("C1 members list:", res_members)
+        assert any("alice" in l for l in res_members), "Expected alice in group members"
+
+        send_line(c1, "HISTORY group_test 10")
+        res_grp_hist = recv_line(c1)
+        print("C1 group_test history:", res_grp_hist)
+        assert any("HISTORY_START group_test" in l for l in res_grp_hist), "Expected HISTORY_START"
+        assert any("Hello everyone in test group!" in l for l in res_grp_hist), "Expected group message in history"
+        assert any("HISTORY_END group_test" in l for l in res_grp_hist), "Expected HISTORY_END"
+
+        # Test 13: Offline Messaging Queue (Task 3.2, 3.4)
+        # Alice sends message to bob (bob is currently offline)
+        send_line(c1, "MSG bob Hello Bob, this is an offline message!")
+        res_offline_ack = recv_line(c1)
+        print("C1 offline msg ack:", res_offline_ack)
+        assert any("offline message stored" in l for l in res_offline_ack), "Expected offline storage ack"
+
+        # Bob logs in now (C3)
+        c3 = connect_client()
+        recv_line(c3) # welcome
+        send_line(c3, "LOGIN bob 123456")
+        res_bob = recv_line(c3)
+        print("C3 (Bob) login response:", res_bob)
+        assert any("LOGIN_OK bob" in l for l in res_bob), "Bob should login successfully"
+        assert any("OFFLINE_START" in l for l in res_bob), "Bob should receive OFFLINE_START"
+        assert any("Hello Bob, this is an offline message!" in l for l in res_bob), "Bob should receive offline message"
+        assert any("OFFLINE_END" in l for l in res_bob), "Bob should receive OFFLINE_END"
+
+        # C1 should receive EVENT_ONLINE bob
+        res_c1_saw_bob = recv_line(c1)
+        print("C1 saw Bob online:", res_c1_saw_bob)
+        assert any("EVENT_ONLINE bob" in l for l in res_c1_saw_bob), "C1 should receive EVENT_ONLINE bob"
+
+        # Bob logs out
+        send_line(c3, "LOGOUT")
+        recv_line(c3)
+        c3.close()
+
         c1.close()
-        print("\n>>> ALL TESTS PASSED SUCCESSFULLY! <<<")
+        print("\n>>> ALL TESTS (MILESTONE 1, 2 & 3) PASSED SUCCESSFULLY! <<<")
 
     finally:
         srv.terminate()
@@ -165,3 +238,4 @@ def run_tests():
 
 if __name__ == '__main__':
     run_tests()
+

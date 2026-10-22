@@ -185,6 +185,20 @@ void handle_command(ClientSession *session, char *cmd_line) {
 
         /* Broadcast presence event to other online clients */
         broadcast_presence(session->username, true, session->sockfd);
+
+        /* Push pending offline messages if any (Task 3.2, 3.4) */
+        MessageRecord off_msgs[64];
+        int off_count = db_get_offline_messages(session->username, off_msgs, 64);
+        if (off_count > 0) {
+            send_to_fd(session->sockfd, "%s %d", RESP_OFFLINE_START, off_count);
+            for (int m = 0; m < off_count; m++) {
+                send_to_fd(session->sockfd, "%s %s %s %s",
+                           RESP_OFFLINE_MSG, off_msgs[m].sender,
+                           off_msgs[m].timestamp, off_msgs[m].content);
+            }
+            send_to_fd(session->sockfd, "%s", RESP_OFFLINE_END);
+            db_mark_messages_delivered(session->username);
+        }
         return;
     }
 
@@ -264,9 +278,18 @@ void handle_command(ClientSession *session, char *cmd_line) {
 
         ClientSession *recipient = find_client_by_name(target);
         if (!recipient) {
-            send_to_fd(session->sockfd, "%s User '%s' is not online", RESP_ERR, target);
+            /* Support offline messaging queue if user exists in database (Task 3.2) */
+            if (db_user_exists(target)) {
+                db_save_message(session->username, target, NULL, msg_content, "TEXT", 0);
+                send_to_fd(session->sockfd, "%s Sent to %s (offline message stored)", RESP_OK, target);
+            } else {
+                send_to_fd(session->sockfd, "%s User '%s' is not online", RESP_ERR, target);
+            }
             return;
         }
+
+        /* Save message to SQLite database (Task 3.2) */
+        db_save_message(session->username, target, NULL, msg_content, "TEXT", 1);
 
         send_to_fd(recipient->sockfd, "%s %s %s", RESP_FROM, session->username, msg_content);
         send_to_fd(session->sockfd, "%s Sent to %s", RESP_OK, target);
@@ -292,6 +315,18 @@ void handle_command(ClientSession *session, char *cmd_line) {
         safe_copy(session->active_partner, target, sizeof(session->active_partner));
         send_to_fd(recipient->sockfd, "%s User '%s' started a 1-on-1 chat with you.", RESP_NOTICE, session->username);
         send_to_fd(session->sockfd, "%s START_CHAT_OK %s", RESP_OK, target);
+
+        /* Auto-sync 15 recent messages from chat history (Task 3.4) */
+        MessageRecord hist[DEFAULT_HISTORY_LIMIT];
+        int h_count = db_get_history_1on1(session->username, target, DEFAULT_HISTORY_LIMIT, hist, DEFAULT_HISTORY_LIMIT);
+        if (h_count > 0) {
+            send_to_fd(session->sockfd, "%s %s", RESP_HISTORY_START, target);
+            for (int h = 0; h < h_count; h++) {
+                send_to_fd(session->sockfd, "%s %s %s %s",
+                           RESP_HISTORY_ITEM, hist[h].timestamp, hist[h].sender, hist[h].content);
+            }
+            send_to_fd(session->sockfd, "%s %s %d", RESP_HISTORY_END, target, h_count);
+        }
         return;
     }
 
@@ -332,6 +367,9 @@ void handle_command(ClientSession *session, char *cmd_line) {
             return;
         }
 
+        /* Sync group & member persistence with SQLite (Task 3.3) */
+        db_add_group_member(gname, session->username);
+
         send_to_fd(session->sockfd, "%s Joined group '%s'", RESP_OK, gname);
         /* Broadcast to other group members */
         for (int i = 0; i < grp->member_count; i++) {
@@ -341,6 +379,18 @@ void handle_command(ClientSession *session, char *cmd_line) {
                     send_to_fd(mem->sockfd, "%s JOIN %s %s", EVENT_GROUP, gname, session->username);
                 }
             }
+        }
+
+        /* Auto-sync recent group chat history (Task 3.4) */
+        MessageRecord hist[DEFAULT_HISTORY_LIMIT];
+        int h_count = db_get_history_group(gname, DEFAULT_HISTORY_LIMIT, hist, DEFAULT_HISTORY_LIMIT);
+        if (h_count > 0) {
+            send_to_fd(session->sockfd, "%s %s", RESP_HISTORY_START, gname);
+            for (int h = 0; h < h_count; h++) {
+                send_to_fd(session->sockfd, "%s %s %s %s",
+                           RESP_HISTORY_ITEM, hist[h].timestamp, hist[h].sender, hist[h].content);
+            }
+            send_to_fd(session->sockfd, "%s %s %d", RESP_HISTORY_END, gname, h_count);
         }
         return;
     }
@@ -367,22 +417,15 @@ void handle_command(ClientSession *session, char *cmd_line) {
             }
         }
         remove_from_group(grp, session->username);
+        /* Remove member from SQLite database (Task 3.3) */
+        db_remove_group_member(gname, session->username);
         send_to_fd(session->sockfd, "%s Left group '%s'", RESP_OK, gname);
         return;
     }
 
     if (strcasecmp(cmd, CMD_GROUPS) == 0) {
         char g_list[BUFFER_SIZE] = "";
-        size_t cur_len = 0;
-        for (int i = 0; i < MAX_GROUPS; i++) {
-            if (g_groups[i].in_use) {
-                int written = snprintf(g_list + cur_len, sizeof(g_list) - cur_len,
-                                       "%s%s", (cur_len > 0 ? " " : ""), g_groups[i].name);
-                if (written > 0 && cur_len + (size_t)written < sizeof(g_list)) {
-                    cur_len += (size_t)written;
-                }
-            }
-        }
+        db_get_groups(g_list, sizeof(g_list));
         send_to_fd(session->sockfd, "%s %s", RESP_GROUPS_LIST, g_list);
         return;
     }
@@ -393,20 +436,12 @@ void handle_command(ClientSession *session, char *cmd_line) {
             send_to_fd(session->sockfd, "%s Usage: MEMBERS <group_name>", RESP_ERR);
             return;
         }
-        Group *grp = find_group(gname);
-        if (!grp) {
+        if (!db_group_exists(gname) && !find_group(gname)) {
             send_to_fd(session->sockfd, "%s Group '%s' does not exist", RESP_ERR, gname);
             return;
         }
         char m_list[BUFFER_SIZE] = "";
-        size_t cur_len = 0;
-        for (int i = 0; i < grp->member_count; i++) {
-            int written = snprintf(m_list + cur_len, sizeof(m_list) - cur_len,
-                                   "%s%s", (cur_len > 0 ? " " : ""), grp->members[i]);
-            if (written > 0 && cur_len + (size_t)written < sizeof(m_list)) {
-                cur_len += (size_t)written;
-            }
-        }
+        db_get_group_members(gname, m_list, sizeof(m_list));
         send_to_fd(session->sockfd, "%s %s %s", RESP_MEMBERS_LIST, gname, m_list);
         return;
     }
@@ -430,27 +465,74 @@ void handle_command(ClientSession *session, char *cmd_line) {
         }
 
         Group *grp = find_group(gname);
-        if (!grp) {
+        if (!grp && !db_group_exists(gname)) {
             send_to_fd(session->sockfd, "%s Group '%s' does not exist", RESP_ERR, gname);
             return;
         }
-        if (!is_group_member(grp, session->username)) {
+        if (!is_group_member(grp, session->username) && !db_is_group_member(gname, session->username)) {
             send_to_fd(session->sockfd, "%s You must join group '%s' first (JOIN %s)", RESP_ERR, gname, gname);
             return;
         }
 
+        /* Save group message into SQLite database (Task 3.3) */
+        db_save_message(session->username, NULL, gname, msg_content, "TEXT", 1);
+
         /* Forward message to all other members */
         int forwarded = 0;
-        for (int i = 0; i < grp->member_count; i++) {
-            if (strcmp(grp->members[i], session->username) != 0) {
-                ClientSession *mem = find_client_by_name(grp->members[i]);
-                if (mem) {
-                    send_to_fd(mem->sockfd, "%s %s %s %s", RESP_GROUP_FROM, gname, session->username, msg_content);
-                    forwarded++;
+        if (grp) {
+            for (int i = 0; i < grp->member_count; i++) {
+                if (strcmp(grp->members[i], session->username) != 0) {
+                    ClientSession *mem = find_client_by_name(grp->members[i]);
+                    if (mem) {
+                        send_to_fd(mem->sockfd, "%s %s %s %s", RESP_GROUP_FROM, gname, session->username, msg_content);
+                        forwarded++;
+                    }
                 }
             }
         }
         send_to_fd(session->sockfd, "%s Group message delivered to %d member(s)", RESP_OK, forwarded);
+        return;
+    }
+
+    /* ---- Chat history sync command (Task 3.4) ---- */
+    if (strcasecmp(cmd, CMD_HISTORY) == 0) {
+        char target[MAX_NAME_LEN] = {0};
+        int limit = DEFAULT_HISTORY_LIMIT;
+        if (sscanf(rest, "%31s %d", target, &limit) < 1) {
+            send_to_fd(session->sockfd, "%s Usage: HISTORY <user/group> [limit]", RESP_ERR);
+            return;
+        }
+        if (limit <= 0 || limit > 50) limit = DEFAULT_HISTORY_LIMIT;
+
+        MessageRecord hist[50];
+        int count = 0;
+        if (db_group_exists(target) || find_group(target) != NULL) {
+            count = db_get_history_group(target, limit, hist, 50);
+        } else if (db_user_exists(target)) {
+            count = db_get_history_1on1(session->username, target, limit, hist, 50);
+        } else {
+            send_to_fd(session->sockfd, "%s Target '%s' does not exist", RESP_ERR, target);
+            return;
+        }
+
+        send_to_fd(session->sockfd, "%s %s", RESP_HISTORY_START, target);
+        for (int i = 0; i < count; i++) {
+            send_to_fd(session->sockfd, "%s %s %s %s",
+                       RESP_HISTORY_ITEM, hist[i].timestamp, hist[i].sender, hist[i].content);
+        }
+        send_to_fd(session->sockfd, "%s %s %d", RESP_HISTORY_END, target, count);
+        return;
+    }
+
+    /* ---- Typing indicator command (Task 2.5 / 3.2) ---- */
+    if (strcasecmp(cmd, CMD_TYPING) == 0) {
+        char target[MAX_NAME_LEN] = {0};
+        if (sscanf(rest, "%31s", target) == 1) {
+            ClientSession *recip = find_client_by_name(target);
+            if (recip) {
+                send_to_fd(recip->sockfd, "%s %s", EVENT_TYPING, session->username);
+            }
+        }
         return;
     }
 

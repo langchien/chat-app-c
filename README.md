@@ -12,6 +12,11 @@ Yêu cầu chức năng mạng:
 - **[Mới - M2]** Lưu trữ cơ sở dữ liệu nhúng SQLite3 (`storage/chat_server.db`) với chế độ WAL.
 - **[Mới - M2]** Bảo mật mật khẩu: Băm SHA-256 kết hợp Salt ngẫu nhiên 16 bytes.
 - **[Mới - M2]** 100% Prepared Statements chống tấn công SQL Injection.
+- **[Mới - M3]** Quản lý hiện diện thời gian thực (Presence Push): Phát sóng tự động trạng thái đăng nhập/rời mạng (`EVENT_ONLINE`, `EVENT_OFFLINE`).
+- **[Mới - M3]** Lưu trữ tin nhắn 1-1 và tin nhóm bền vững trong bảng `messages` SQLite3.
+- **[Mới - M3]** Đồng bộ lịch sử tin nhắn: Tự động tải tin nhắn gần nhất khi mở phiên chat 1-1 (`/chat`), vào nhóm (`/join`) hoặc qua lệnh `/history`.
+- **[Mới - M3]** Hàng đợi tin nhắn ngoại tuyến (Offline Messages): Tự động lưu và đẩy tin nhắn chưa đọc khi người nhận online lại.
+- **[Mới - M3]** Nhóm chat bền vững (Group Persistence): Lưu trữ nhóm và thành viên trong CSDL, khôi phục nguyên vẹn sau khi khởi động lại server.
 
 ---
 
@@ -111,6 +116,7 @@ Client hỗ trợ giao diện dòng lệnh trực quan với màu sắc ANSI đ�
 - `/group <tên_nhóm> <nội_dung>`: Gửi tin nhắn tới toàn bộ thành viên trong nhóm.
 - `/groups`: Xem danh sách các nhóm đang có trên server.
 - `/members <tên_nhóm>`: Xem danh sách thành viên trong nhóm cụ thể.
+- `/history <user/nhóm> [số_lượng]`: Xem lịch sử tin nhắn lưu trữ từ CSDL SQLite3 (mặc định 15 tin nhắn).
 - `/logout`: Đăng xuất tài khoản hiện tại.
 - `/help`: Hiển thị lại bảng hướng dẫn lệnh.
 - `/quit`: Thoát chương trình.
@@ -138,10 +144,14 @@ python3 tests/test_chatapp.py
 ```
 Kịch bản tự động kiểm tra:
 1. Thông điệp chào mừng kết nối.
-2. Từ chối đăng nhập sai mật khẩu.
-3. Đăng nhập thành công và đẩy danh sách online.
-4. Đăng ký tài khoản mới và từ chối đăng nhập trùng lặp (duplicate login).
-5. Phát hiện và phát sự kiện trạng thái (online / offline presence) theo thời gian thực.
-6. Chuyển tiếp tin nhắn riêng 1-1.
-7. Tham gia nhóm và phát tán tin nhắn nhóm.
-8. Mở phiên chat 1-1 và phát thông báo khi đối phương ngắt kết nối đột ngột.
+2. Từ chối thực thi lệnh khi chưa xác thực (Unauthenticated command guard).
+3. Từ chối đăng nhập sai mật khẩu.
+4. Đăng nhập thành công với tài khoản mẫu SQLite3 (SHA-256 + Salt).
+5. Từ chối đăng nhập lại trên cùng một phiên và từ chối đăng nhập trùng (Duplicate login).
+6. Đăng ký tài khoản mới và từ chối đăng ký trùng tên.
+7. Phát hiện và phát sự kiện trạng thái (online / offline presence) theo thời gian thực (`EVENT_ONLINE`, `EVENT_OFFLINE`).
+8. Chuyển tiếp tin nhắn riêng 1-1 và tự động lưu vào bảng `messages` CSDL.
+9. Tham gia nhóm, rời nhóm và phát tán tin nhắn nhóm đồng bộ CSDL.
+10. Mở phiên chat 1-1 (`START_CHAT`) và phát thông báo khi đối phương ngắt kết nối đột ngột.
+11. Tự động đồng bộ và truy vấn lịch sử tin nhắn 1-1 và nhóm (`HISTORY`).
+12. Hàng đợi tin nhắn ngoại tuyến (Offline messages queue): Lưu tin khi người nhận offline và tự động đẩy về khi online lại (`OFFLINE_MSG`).

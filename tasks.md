@@ -1,6 +1,6 @@
 # Danh Sách Tasks Triển Khai Chat C
 
-> **Tiến độ tổng quan:** 7/19 tasks hoàn thành (37%)
+> **Tiến độ tổng quan:** 11/19 tasks hoàn thành (58%)
 
 ---
 
@@ -16,10 +16,10 @@
 - [x] Task 2.3: Quản lý Phiên Xác Thực & Chống Đăng Nhập Trùng (`REGISTER`, `LOGIN`, `LOGOUT`)
 
 ## Giai Đoạn 3: Hiện Diện Thời Gian Thực, Chat 1-1, Chat Nhóm & Lịch Sử (Milestone 3)
-- [ ] Task 3.1: Hệ thống Quản lý Hiện diện Thời gian thực (Realtime Presence Push)
-- [ ] Task 3.2: Định tuyến Nhắn tin 1-1 & Phiên Trò chuyện Trực tiếp (`/msg`, `/chat`, `/endchat`)
-- [ ] Task 3.3: Quản lý Nhóm Chat & Đồng bộ CSDL (`JOIN`, `LEAVE`, `GROUP_MSG`, `GROUPS`, `MEMBERS`)
-- [ ] Task 3.4: Tải Lịch sử Tin nhắn (Chat History Sync)
+- [x] Task 3.1: Hệ thống Quản lý Hiện diện Thời gian thực (Realtime Presence Push)
+- [x] Task 3.2: Định tuyến Nhắn tin 1-1 & Phiên Trò chuyện Trực tiếp (`/msg`, `/chat`, `/endchat`)
+- [x] Task 3.3: Quản lý Nhóm Chat & Đồng bộ CSDL (`JOIN`, `LEAVE`, `GROUP_MSG`, `GROUPS`, `MEMBERS`)
+- [x] Task 3.4: Tải Lịch sử Tin nhắn (Chat History Sync)
 
 ## Giai Đoạn 4: Truyền Tải File & Hình Ảnh Qua C Socket (Milestone 4)
 - [ ] Task 4.1: Thiết kế Giao thức Truyền Chunk & Quản lý Bộ đệm File (`src/server/file_transfer.c`)

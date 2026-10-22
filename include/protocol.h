@@ -37,6 +37,8 @@
 #define CMD_GROUPS              "GROUPS"
 #define CMD_MEMBERS             "MEMBERS"
 #define CMD_GROUP_MSG           "GROUP_MSG"
+#define CMD_HISTORY             "HISTORY"
+#define CMD_TYPING              "TYPING"
 #define CMD_QUIT                "QUIT"
 
 /* Heartbeat commands (Task 1.4) */
@@ -58,5 +60,15 @@
 #define RESP_MEMBERS_LIST       "MEMBERS_LIST"
 #define RESP_NOTICE             "NOTICE"
 #define RESP_SERVER_SHUTDOWN    "SERVER_SHUTDOWN"
+
+/* History & Offline sync (Task 3.2, 3.4) */
+#define RESP_HISTORY_START      "HISTORY_START"
+#define RESP_HISTORY_ITEM       "HISTORY_ITEM"
+#define RESP_HISTORY_END        "HISTORY_END"
+#define RESP_OFFLINE_START      "OFFLINE_START"
+#define RESP_OFFLINE_MSG        "OFFLINE_MSG"
+#define RESP_OFFLINE_END        "OFFLINE_END"
+#define EVENT_TYPING            "EVENT_TYPING"
+#define DEFAULT_HISTORY_LIMIT   15
 
 #endif /* PROTOCOL_H */
