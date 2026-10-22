@@ -70,6 +70,38 @@ void remove_file_transfer(const char *transfer_id) {
 }
 
 /* ============================================================
+ * cleanup_user_file_transfers – Abort & cleanup all transfers
+ * associated with a user when they disconnect or logout.
+ * Task 6.2: Resource & FD leak prevention.
+ * ============================================================ */
+void cleanup_user_file_transfers(const char *username) {
+    if (!username || strlen(username) == 0) return;
+    for (int i = 0; i < MAX_FILE_TRANSFERS; i++) {
+        if (g_file_transfers[i].in_use) {
+            if (strcmp(g_file_transfers[i].sender, username) == 0) {
+                if (!g_file_transfers[i].is_group) {
+                    ClientSession *rec = find_client_by_name(g_file_transfers[i].target);
+                    if (rec) {
+                        send_to_fd(rec->sockfd, "%s Transfer '%s' aborted: sender '%s' disconnected",
+                                   RESP_ERR, g_file_transfers[i].transfer_id, username);
+                    }
+                }
+                g_file_transfers[i].in_use = false;
+                memset(&g_file_transfers[i], 0, sizeof(FileTransferSession));
+            } else if (!g_file_transfers[i].is_group && strcmp(g_file_transfers[i].target, username) == 0) {
+                ClientSession *snd = find_client_by_name(g_file_transfers[i].sender);
+                if (snd) {
+                    send_to_fd(snd->sockfd, "%s Transfer '%s' aborted: recipient '%s' disconnected",
+                               RESP_ERR, g_file_transfers[i].transfer_id, username);
+                }
+                g_file_transfers[i].in_use = false;
+                memset(&g_file_transfers[i], 0, sizeof(FileTransferSession));
+            }
+        }
+    }
+}
+
+/* ============================================================
  * handle_file_init
  * Syntax: FILE_INIT <target> <filename> <filesize> <sha256> <is_image>
  * ============================================================ */

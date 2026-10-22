@@ -164,24 +164,54 @@ Nhấn `Ctrl+C` trên server sẽ:
 
 ## 6. Chạy Kiểm Thử Tự Động (Automated Testing)
 
-Một kịch bản kiểm thử tích hợp tự động toàn diện được cung cấp sẵn bằng Python (16 kịch bản kiểm thử):
+Bộ kiểm thử tích hợp tự động toàn diện v2.0 với 20 kịch bản kiểm thử:
 ```bash
-python3 tests/test_chatapp.py
+python3 tests/test_chatapp_v2.py
 ```
 Kịch bản tự động kiểm tra:
-1. Thông điệp chào mừng kết nối.
+1. Thông điệp chào mừng kết nối ban đầu.
 2. Từ chối thực thi lệnh khi chưa xác thực (Unauthenticated command guard).
 3. Từ chối đăng nhập sai mật khẩu.
 4. Đăng nhập thành công với tài khoản mẫu SQLite3 (SHA-256 + Salt).
 5. Từ chối đăng nhập lại trên cùng một phiên và từ chối đăng nhập trùng (Duplicate login).
 6. Đăng ký tài khoản mới và từ chối đăng ký trùng tên.
-7. Phát hiện và phát sự kiện trạng thái (online / offline presence) theo thời gian thực (`EVENT_ONLINE`, `EVENT_OFFLINE`).
-8. Chuyển tiếp tin nhắn riêng 1-1 và tự động lưu vào bảng `messages` CSDL.
-9. Tham gia nhóm, rời nhóm và phát tán tin nhắn nhóm đồng bộ CSDL.
-10. Mở phiên chat 1-1 (`START_CHAT`) và phát thông báo khi đối phương ngắt kết nối đột ngột.
-11. Tự động đồng bộ và truy vấn lịch sử tin nhắn 1-1 và nhóm (`HISTORY`).
-12. Hàng đợi tin nhắn ngoại tuyến (Offline messages queue): Lưu tin khi người nhận offline và tự động đẩy về khi online lại (`OFFLINE_MSG`).
-13. Cơ chế nhịp tim giữ kết nối (Heartbeat PING/PONG).
-14. Từ chối khởi tạo truyền file vượt quá giới hạn 50MB (`FILE_REJECTED`).
-15. Truyền file nhị phân hoàn chỉnh theo chunk Base64 non-blocking và đối chiếu checksum SHA-256.
-16. Truyền file hình ảnh với cờ nhận diện `is_image = 1` và hiển thị trên terminal người nhận.
+7. **Tính bền vững của SQLite3 qua các lần khởi động lại server (Persistence Test)**: Đăng ký tài khoản mới, tắt server, bật lại server và đăng nhập thành công.
+8. Phát hiện và phát sự kiện trạng thái (online / offline presence) theo thời gian thực (`EVENT_ONLINE`, `EVENT_OFFLINE`).
+9. Chặn tự gửi tin nhắn cho chính mình (`Cannot send message to yourself`).
+10. Chuyển tiếp tin nhắn riêng 1-1 và tự động lưu vào bảng `messages` CSDL.
+11. Tham gia nhóm, rời nhóm, chặn gửi tin vào nhóm khi chưa join và phát tán tin nhắn nhóm đồng bộ CSDL.
+12. Mở phiên chat 1-1 (`START_CHAT`) và phát thông báo khi đối phương ngắt kết nối đột ngột.
+13. Tự động đồng bộ và truy vấn lịch sử tin nhắn 1-1 và nhóm (`HISTORY`).
+14. Hàng đợi tin nhắn ngoại tuyến (Offline messages queue): Lưu tin khi người nhận offline và tự động đẩy về khi online lại (`OFFLINE_MSG`).
+15. Cơ chế nhịp tim giữ kết nối (Heartbeat PING/PONG).
+16. **Hiện tượng dính gói TCP (Sticky Packet Stress Test)**: Bắn liên tiếp 20 lệnh trong 1 buffer TCP duy nhất để xác nhận bộ phân tách framing `\n` hoạt động chuẩn 100%.
+17. Từ chối khởi tạo truyền file vượt quá giới hạn 50MB (`FILE_REJECTED`).
+18. Truyền file nhị phân hoàn chỉnh theo chunk Base64 non-blocking và đối chiếu checksum SHA-256.
+19. Truyền file hình ảnh với cờ nhận diện `is_image = 1` và hiển thị trên terminal người nhận.
+20. Tự động thu hồi và thông báo hủy phiên truyền file mồ côi khi một bên ngắt kết nối đột ngột.
+
+---
+
+## 7. Kiểm Tra Chịu Tải & Rò Rỉ Tài Nguyên (Stress Test & Valgrind)
+
+### A. Kiểm thử chịu tải đồng thời (Stress Test):
+Chạy script giả lập 50 - 100 client luồng đồng thời:
+```bash
+python3 tests/stress_test.py
+```
+- Kết nối đồng thời 50 clients.
+- Đăng ký tài khoản, đăng nhập, tham gia phòng `stress_room`.
+- Bắn liên tục hàng trăm tin nhắn nhóm.
+- 50% client ngắt kết nối đột ngột (drop socket không báo trước).
+- Kiểm tra server không bị crash bởi tín hiệu `SIGPIPE`, không bị deadlock và vẫn phục vụ các client còn lại bình thường.
+
+### B. Kiểm tra rò rỉ bộ nhớ (Valgrind Memcheck):
+Chạy kịch bản phân tích rò rỉ bộ nhớ và tài nguyên File Descriptor:
+```bash
+chmod +x scripts/run_valgrind.sh
+./scripts/run_valgrind.sh
+```
+Script sẽ khởi động server dưới sự giám sát của Valgrind (`--leak-check=full --track-fds=yes`), thực hiện các bài test tải và gửi tín hiệu Graceful Shutdown để xác nhận:
+- `0 errors from 0 contexts`
+- Không rò rỉ con trỏ `malloc` / `free`.
+- Không rò rỉ socket và con trỏ file (`sqlite3_finalize`, `fclose`, `close`).

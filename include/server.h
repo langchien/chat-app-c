@@ -90,6 +90,7 @@ void   remove_file_transfer(const char *transfer_id);
 void   handle_file_init(ClientSession *session, char *args);
 void   handle_file_chunk(ClientSession *session, char *args);
 void   handle_file_end(ClientSession *session, char *args);
+void   cleanup_user_file_transfers(const char *username);
 
 /* ============================================================
  * Account helpers (wrappers around database.h)

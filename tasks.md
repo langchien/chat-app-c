@@ -1,6 +1,6 @@
 # Danh Sách Tasks Triển Khai Chat C
 
-> **Tiến độ tổng quan:** 17/19 tasks hoàn thành (89%)
+> **Tiến độ tổng quan:** 19/19 tasks hoàn thành (100%) - HOÀN THÀNH TOÀN BỘ DỰ ÁN
 
 ---
 
@@ -32,5 +32,5 @@
 - [x] Task 5.3: Chế độ Tương thích CLI (`--headless` / `--simple-cli`)
 
 ## Giai Đoạn 6: Kiểm Thử Tự Động & Đóng Gói (Milestone 6)
-- [ ] Task 6.1: Mở rộng Bộ Kiểm Thử Tự Động (`tests/test_chatapp_v2.py`)
-- [ ] Task 6.2: Kiểm tra Rò rỉ Bộ nhớ & Tài nguyên (Valgrind & Stress Test)
+- [x] Task 6.1: Mở rộng Bộ Kiểm Thử Tự Động (`tests/test_chatapp_v2.py`)
+- [x] Task 6.2: Kiểm tra Rò rỉ Bộ nhớ & Tài nguyên (Valgrind & Stress Test)

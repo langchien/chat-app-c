@@ -117,7 +117,10 @@ void disconnect_client(int index) {
         /* 2. Remove from all groups and notify group members */
         remove_client_from_all_groups(session->username);
 
-        /* 3. Broadcast offline event to all active sessions */
+        /* 3. Abort & cleanup any ongoing file transfer sessions (Task 6.2) */
+        cleanup_user_file_transfers(session->username);
+
+        /* 4. Broadcast offline event to all active sessions */
         broadcast_presence(session->username, false, session->sockfd);
     }
 
