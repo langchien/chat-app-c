@@ -249,3 +249,107 @@ bool verify_password(const char *password, const char *salt_hex, const char *exp
     }
     return (diff == 0);
 }
+
+/* ============================================================
+ * File Checksum (SHA-256) – Task 4.3
+ * ============================================================ */
+int sha256_file(const char *filepath, char hex_out[SHA256_HEX_LEN + 1]) {
+    if (!filepath || !hex_out) return -1;
+    FILE *fp = fopen(filepath, "rb");
+    if (!fp) return -1;
+
+    SHA256_CTX ctx;
+    sha256_init(&ctx);
+
+    uint8_t buf[4096];
+    size_t bytes_read;
+    while ((bytes_read = fread(buf, 1, sizeof(buf), fp)) > 0) {
+        sha256_update(&ctx, buf, bytes_read);
+    }
+    fclose(fp);
+
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    sha256_final(&ctx, digest);
+    sha256_digest_to_hex(digest, hex_out);
+    return 0;
+}
+
+/* ============================================================
+ * Base64 Encoding & Decoding – Task 4.1
+ * ============================================================ */
+static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+size_t base64_encode(const unsigned char *src, size_t len, char *out, size_t out_size) {
+    if (!src || !out || out_size == 0) return 0;
+    size_t out_len = 4 * ((len + 2) / 3);
+    if (out_size < out_len + 1) return 0;
+
+    size_t i = 0, j = 0;
+    while (i < len) {
+        uint32_t octet_a = i < len ? src[i++] : 0;
+        uint32_t octet_b = i < len ? src[i++] : 0;
+        uint32_t octet_c = i < len ? src[i++] : 0;
+
+        uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+
+        out[j++] = b64_table[(triple >> 18) & 0x3F];
+        out[j++] = b64_table[(triple >> 12) & 0x3F];
+        out[j++] = (i > len + 1) ? '=' : b64_table[(triple >> 6) & 0x3F];
+        out[j++] = (i > len)     ? '=' : b64_table[triple & 0x3F];
+    }
+    out[j] = '\0';
+    return j;
+}
+
+static const int b64_index[256] = {
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,62, -1,-1,-1,63,
+    52,53,54,55, 56,57,58,59, 60,61,-1,-1, -1,-1,-1,-1,
+    -1, 0, 1, 2,  3, 4, 5, 6,  7, 8, 9,10, 11,12,13,14,
+    15,16,17,18, 19,20,21,22, 23,24,25,-1, -1,-1,-1,-1,
+    -1,26,27,28, 29,30,31,32, 33,34,35,36, 37,38,39,40,
+    41,42,43,44, 45,46,47,48, 49,50,51,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1
+};
+
+size_t base64_decode(const char *src, size_t len, unsigned char *out, size_t out_size) {
+    if (!src || !out || out_size == 0) return 0;
+    size_t i = 0, j = 0;
+
+    while (i < len) {
+        while (i < len && (src[i] == ' ' || src[i] == '\r' || src[i] == '\n' || src[i] == '\t')) i++;
+        if (i >= len || src[i] == '=') break;
+
+        int b1 = b64_index[(unsigned char)src[i++]];
+        if (b1 < 0) break;
+        if (i >= len) break;
+        int b2 = b64_index[(unsigned char)src[i++]];
+        if (b2 < 0) break;
+
+        if (j >= out_size) break;
+        out[j++] = (unsigned char)((b1 << 2) | (b2 >> 4));
+
+        if (i >= len || src[i] == '=') break;
+        int b3 = b64_index[(unsigned char)src[i++]];
+        if (b3 < 0) break;
+
+        if (j >= out_size) break;
+        out[j++] = (unsigned char)(((b2 & 0x0F) << 4) | (b3 >> 2));
+
+        if (i >= len || src[i] == '=') break;
+        int b4 = b64_index[(unsigned char)src[i++]];
+        if (b4 < 0) break;
+
+        if (j >= out_size) break;
+        out[j++] = (unsigned char)(((b3 & 0x03) << 6) | b4);
+    }
+    return j;
+}

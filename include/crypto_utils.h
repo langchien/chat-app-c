@@ -37,4 +37,11 @@ void generate_salt_hex(char salt_hex[SALT_HEX_LEN + 1]);
 void hash_password(const char *password, const char *salt_hex, char hash_hex[SHA256_HEX_LEN + 1]);
 bool verify_password(const char *password, const char *salt_hex, const char *expected_hash);
 
+/* ---- File Checksum helper (Task 4.3) ---- */
+int sha256_file(const char *filepath, char hex_out[SHA256_HEX_LEN + 1]);
+
+/* ---- Base64 Encoding / Decoding helpers (Task 4.1) ---- */
+size_t base64_encode(const unsigned char *src, size_t len, char *out, size_t out_size);
+size_t base64_decode(const char *src, size_t len, unsigned char *out, size_t out_size);
+
 #endif /* CRYPTO_UTILS_H */

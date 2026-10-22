@@ -37,10 +37,31 @@ typedef struct {
 } Group;
 
 /* ============================================================
+ * File transfer session representation (Task 4.1)
+ * ============================================================ */
+typedef struct {
+    bool    in_use;
+    char    transfer_id[MAX_TRANSFER_ID_LEN];
+    char    sender[MAX_NAME_LEN];
+    char    target[MAX_NAME_LEN];
+    bool    is_group;
+    char    filename[MAX_FILENAME_LEN];
+    long    filesize;
+    char    sha256[SHA256_HEX_LEN + 1];
+    bool    is_image;
+    int     total_chunks;
+    int     received_chunks;
+    time_t  started_at;
+} FileTransferSession;
+
+#define MAX_FILE_TRANSFERS 64
+
+/* ============================================================
  * Global state (extern declarations)
  * ============================================================ */
-extern ClientSession g_clients[MAX_CLIENTS];
-extern Group         g_groups[MAX_GROUPS];
+extern ClientSession       g_clients[MAX_CLIENTS];
+extern Group               g_groups[MAX_GROUPS];
+extern FileTransferSession g_file_transfers[MAX_FILE_TRANSFERS];
 extern volatile sig_atomic_t g_running;   /* Graceful shutdown flag */
 
 /* ============================================================
@@ -56,6 +77,19 @@ void   disconnect_client(int index);
  * router.c – Command routing & chat logic
  * ============================================================ */
 void   handle_command(ClientSession *session, char *cmd_line);
+
+/* ============================================================
+ * file_transfer.c – File & image chunk routing (Task 4.1)
+ * ============================================================ */
+void   init_file_transfers(void);
+FileTransferSession* find_file_transfer(const char *transfer_id);
+FileTransferSession* create_file_transfer(const char *sender, const char *target, bool is_group,
+                                         const char *filename, long filesize,
+                                         const char *sha256, bool is_image);
+void   remove_file_transfer(const char *transfer_id);
+void   handle_file_init(ClientSession *session, char *args);
+void   handle_file_chunk(ClientSession *session, char *args);
+void   handle_file_end(ClientSession *session, char *args);
 
 /* ============================================================
  * Account helpers (wrappers around database.h)

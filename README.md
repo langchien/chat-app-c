@@ -17,6 +17,10 @@ Yêu cầu chức năng mạng:
 - **[Mới - M3]** Đồng bộ lịch sử tin nhắn: Tự động tải tin nhắn gần nhất khi mở phiên chat 1-1 (`/chat`), vào nhóm (`/join`) hoặc qua lệnh `/history`.
 - **[Mới - M3]** Hàng đợi tin nhắn ngoại tuyến (Offline Messages): Tự động lưu và đẩy tin nhắn chưa đọc khi người nhận online lại.
 - **[Mới - M3]** Nhóm chat bền vững (Group Persistence): Lưu trữ nhóm và thành viên trong CSDL, khôi phục nguyên vẹn sau khi khởi động lại server.
+- **[Mới - M4]** Truyền tải File & Ảnh nhị phân đa nhiệm không chặn (Non-blocking Chunk Streaming qua socket write multiplexing).
+- **[Mới - M4]** Mã hóa Base64 cho từng chunk 2KB để bảo toàn ranh giới gói tin và chống dính gói nhị phân.
+- **[Mới - M4]** Kiểm tra toàn vẹn file tự động bằng mã băm SHA-256 đối chiếu giữa 2 đầu gửi/nhận.
+- **[Mới - M4]** Trình xem ảnh trực tiếp trên Terminal bằng khối màu ANSI TrueColor Half-blocks (`▀`).
 
 ---
 
@@ -27,22 +31,35 @@ chat-app/
 ├── Makefile                    # Biên dịch đa module (-Wall -Wextra -Werror -g -O2 -lsqlite3 -lpthread)
 ├── include/
 │   ├── protocol.h              # Định nghĩa lệnh, mã lỗi, hằng số giao thức
-│   ├── server.h                # Cấu trúc ClientSession, Group, hàm API server
+│   ├── server.h                # Cấu trúc ClientSession, Group, FileTransferSession
 │   ├── database.h              # API giao tiếp CSDL SQLite3
-│   ├── crypto_utils.h          # API SHA-256 và sinh Salt mật khẩu
-│   └── client_ui.h             # Hàm giao diện client, mã màu ANSI
+│   ├── crypto_utils.h          # API SHA-256, sinh Salt mật khẩu và Base64
+│   └── client_ui.h             # Hàm giao diện client, mã màu ANSI, File Jobs
 ├── src/
 │   ├── common/
 │   │   ├── protocol.c          # Hàm tiện ích dùng chung (safe_copy, trim_whitespace)
-│   │   └── crypto_utils.c      # Cài đặt SHA-256 (FIPS 180-2) + Salt 16 bytes
+│   │   └── crypto_utils.c      # Cài đặt SHA-256 (FIPS 180-2), Salt và Base64
 │   ├── server/
 │   │   ├── main.c              # Khởi tạo Server, select() loop, Heartbeat, Graceful shutdown
 │   │   ├── session.c           # Quản lý kết nối, presence, disconnect_client()
 │   │   ├── router.c            # Định tuyến lệnh, chat 1-1, nhóm, xác thực DB
-│   │   └── database.c          # Khởi tạo schema SQLite3, Prepared Statements, Seed mẫu
+│   │   ├── database.c          # Khởi tạo schema SQLite3, Prepared Statements, Seed mẫu
+│   │   └── file_transfer.c     # Điều phối truyền file/ảnh theo chunk, ghi DB
 │   └── client/
-│       ├── main.c              # Khởi tạo Client, select() multiplexing stdin & socket
-│       ├── net_handler.c       # Gửi gói tin tới server
+│       ├── main.c              # Khởi tạo Client, select() non-blocking read/write
+│       ├── net_handler.c       # Gửi/nhận chunk file nền, xác minh SHA-256, xem ảnh
+│       └── ui_continuous.c     # Hiển thị ANSI, xử lý input, tự động PONG
+├── storage/
+│   ├── chat_server.db          # File SQLite3 CSDL (tự sinh lúc chạy server)
+│   ├── server_uploads/         # Thư mục đệm file/ảnh trên server
+│   └── client_downloads/       # Thư mục lưu file/ảnh tải về phía client
+├── tests/
+│   └── test_chatapp.py         # Script kiểm thử tự động toàn diện
+├── README.md                   # Hướng dẫn sử dụng
+├── issue.md                    # Phân tích vấn đề mạng
+├── plan_tasks.md               # Kế hoạch triển khai chi tiết
+└── tasks.md                    # Danh sách theo dõi tiến độ
+```
 │       └── ui_continuous.c     # Hiển thị ANSI, xử lý input, tự động PONG
 ├── storage/
 │   ├── chat_server.db          # File SQLite3 CSDL (tự sinh lúc chạy server)
@@ -116,6 +133,8 @@ Client hỗ trợ giao diện dòng lệnh trực quan với màu sắc ANSI đ�
 - `/group <tên_nhóm> <nội_dung>`: Gửi tin nhắn tới toàn bộ thành viên trong nhóm.
 - `/groups`: Xem danh sách các nhóm đang có trên server.
 - `/members <tên_nhóm>`: Xem danh sách thành viên trong nhóm cụ thể.
+- `/sendfile <username> <đường_dẫn_file>`: Gửi tập tin bất kỳ cho người dùng khác (hỗ trợ file tới 50MB, cắt chunk 2KB Base64 non-blocking, kiểm tra toàn vẹn SHA-256).
+- `/sendimg <username> <đường_dẫn_ảnh>`: Gửi hình ảnh (.bmp, .png, .jpg) cho người dùng khác với cờ hiển thị thumbnail trực tiếp trên Terminal.
 - `/history <user/nhóm> [số_lượng]`: Xem lịch sử tin nhắn lưu trữ từ CSDL SQLite3 (mặc định 15 tin nhắn).
 - `/logout`: Đăng xuất tài khoản hiện tại.
 - `/help`: Hiển thị lại bảng hướng dẫn lệnh.
@@ -138,7 +157,7 @@ Nhấn `Ctrl+C` trên server sẽ:
 
 ## 6. Chạy Kiểm Thử Tự Động (Automated Testing)
 
-Một kịch bản kiểm thử tích hợp tự động toàn diện được cung cấp sẵn bằng Python:
+Một kịch bản kiểm thử tích hợp tự động toàn diện được cung cấp sẵn bằng Python (16 kịch bản kiểm thử):
 ```bash
 python3 tests/test_chatapp.py
 ```
@@ -155,3 +174,7 @@ Kịch bản tự động kiểm tra:
 10. Mở phiên chat 1-1 (`START_CHAT`) và phát thông báo khi đối phương ngắt kết nối đột ngột.
 11. Tự động đồng bộ và truy vấn lịch sử tin nhắn 1-1 và nhóm (`HISTORY`).
 12. Hàng đợi tin nhắn ngoại tuyến (Offline messages queue): Lưu tin khi người nhận offline và tự động đẩy về khi online lại (`OFFLINE_MSG`).
+13. Cơ chế nhịp tim giữ kết nối (Heartbeat PING/PONG).
+14. Từ chối khởi tạo truyền file vượt quá giới hạn 50MB (`FILE_REJECTED`).
+15. Truyền file nhị phân hoàn chỉnh theo chunk Base64 non-blocking và đối chiếu checksum SHA-256.
+16. Truyền file hình ảnh với cờ nhận diện `is_image = 1` và hiển thị trên terminal người nhận.

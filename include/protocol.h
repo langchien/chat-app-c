@@ -39,6 +39,12 @@
 #define CMD_GROUP_MSG           "GROUP_MSG"
 #define CMD_HISTORY             "HISTORY"
 #define CMD_TYPING              "TYPING"
+
+/* File & Image Transfer Commands (Task 4.1) */
+#define CMD_FILE_INIT           "FILE_INIT"
+#define CMD_FILE_CHUNK          "FILE_CHUNK"
+#define CMD_FILE_END            "FILE_END"
+
 #define CMD_QUIT                "QUIT"
 
 /* Heartbeat commands (Task 1.4) */
@@ -70,5 +76,17 @@
 #define RESP_OFFLINE_END        "OFFLINE_END"
 #define EVENT_TYPING            "EVENT_TYPING"
 #define DEFAULT_HISTORY_LIMIT   15
+
+/* File & Image Transfer Protocol (Task 4.1) */
+#define RESP_FILE_READY         "FILE_READY"
+#define RESP_FILE_INCOMING      "FILE_INCOMING"
+#define RESP_FILE_CHUNK         "FILE_CHUNK"
+#define RESP_FILE_DONE          "FILE_DONE"
+
+#define MAX_CHUNK_SIZE          2048   /* 2KB raw binary per chunk */
+#define MAX_BASE64_CHUNK_SIZE   2800   /* Base64 encoded chunk max buffer size */
+#define MAX_FILENAME_LEN        128
+#define MAX_TRANSFER_ID_LEN     32
+#define MAX_FILE_SIZE           (50 * 1024 * 1024) /* 50MB max file size */
 
 #endif /* PROTOCOL_H */

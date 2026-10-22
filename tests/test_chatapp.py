@@ -4,6 +4,8 @@ import time
 import subprocess
 import sys
 import os
+import hashlib
+import base64
 
 SERVER_PORT = 9988
 SERVER_CMD = ["./server", str(SERVER_PORT)]
@@ -224,13 +226,103 @@ def run_tests():
         print("C1 saw Bob online:", res_c1_saw_bob)
         assert any("EVENT_ONLINE bob" in l for l in res_c1_saw_bob), "C1 should receive EVENT_ONLINE bob"
 
-        # Bob logs out
+        # ========================================================
+        # Milestone 4 Tests: Chunked File & Image Transfer
+        # ========================================================
+        print("\n>>> Testing Milestone 4 Features (File & Image Transfer)...")
+
+        # Test 14: File size limit check (> 50MB)
+        send_line(c1, "FILE_INIT bob hugefile.iso 55000000 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 0")
+        res_limit = recv_line(c1)
+        print("C1 file size limit test:", res_limit)
+        assert any("exceeds maximum allowed limit" in l for l in res_limit), "Expected size limit error"
+
+        # Bob logs in again (C3)
+        c3 = connect_client()
+        recv_line(c3) # welcome
+        send_line(c3, "LOGIN bob 123456")
+        recv_line(c3) # login_ok + list
+        recv_line(c1) # saw bob online
+
+        # Test 15: Chunked binary file transfer (Alice -> Bob)
+        test_payload = b"Antigravity Chat App Binary File Content -- " * 50 # ~2200 bytes
+        expected_sha256 = hashlib.sha256(test_payload).hexdigest()
+        file_len = len(test_payload)
+        filename = "test_document.bin"
+
+        send_line(c1, f"FILE_INIT bob {filename} {file_len} {expected_sha256} 0")
+        res_init_alice = recv_line(c1)
+        print("C1 FILE_INIT ack:", res_init_alice)
+        assert any("FILE_READY" in l for l in res_init_alice), "Expected FILE_READY"
+
+        transfer_id = None
+        for l in res_init_alice:
+            if "FILE_READY" in l:
+                transfer_id = l.split()[2]
+                break
+        assert transfer_id is not None, "transfer_id should not be None"
+
+        res_incoming_bob = recv_line(c3)
+        print("C3 (Bob) saw FILE_INCOMING:", res_incoming_bob)
+        assert any(f"FILE_INCOMING {transfer_id} alice {filename} {file_len} {expected_sha256} 0" in l for l in res_incoming_bob)
+
+        # Alice sends chunks (each 1024 bytes)
+        chunk_size = 1024
+        seq = 0
+        for offset in range(0, file_len, chunk_size):
+            chunk = test_payload[offset:offset + chunk_size]
+            b64_chunk = base64.b64encode(chunk).decode('ascii')
+            send_line(c1, f"FILE_CHUNK {transfer_id} {seq} {b64_chunk}")
+            seq += 1
+
+            # Bob receives chunk
+            bob_chunk_res = recv_line(c3)
+            assert any(f"FILE_CHUNK {transfer_id} {seq-1}" in l for l in bob_chunk_res), "Bob should receive FILE_CHUNK"
+
+        # Alice sends FILE_END
+        send_line(c1, f"FILE_END {transfer_id}")
+        res_alice_end = recv_line(c1)
+        print("C1 file end ack:", res_alice_end)
+        assert any("transfer completed" in l for l in res_alice_end)
+
+        res_bob_done = recv_line(c3)
+        print("C3 saw FILE_DONE:", res_bob_done)
+        assert any(f"FILE_DONE {transfer_id} {expected_sha256}" in l for l in res_bob_done), "Bob should receive FILE_DONE with SHA-256"
+
+        # Test 16: Image Transfer (Alice -> Bob with is_image = 1)
+        img_payload = b"SIMPLE_IMAGE_BYTES_RGBA" * 30
+        img_sha256 = hashlib.sha256(img_payload).hexdigest()
+        img_name = "test_image.png"
+
+        send_line(c1, f"FILE_INIT bob {img_name} {len(img_payload)} {img_sha256} 1")
+        res_img_init = recv_line(c1)
+        img_tid = None
+        for l in res_img_init:
+            if "FILE_READY" in l:
+                img_tid = l.split()[2]
+                break
+        assert img_tid is not None
+
+        res_img_incoming = recv_line(c3)
+        assert any(f"FILE_INCOMING {img_tid} alice {img_name} {len(img_payload)} {img_sha256} 1" in l for l in res_img_incoming)
+
+        # Send chunk & end
+        img_b64 = base64.b64encode(img_payload).decode('ascii')
+        send_line(c1, f"FILE_CHUNK {img_tid} 0 {img_b64}")
+        recv_line(c3) # chunk ack
+
+        send_line(c1, f"FILE_END {img_tid}")
+        recv_line(c1) # end ack
+        res_img_done = recv_line(c3)
+        assert any(f"FILE_DONE {img_tid} {img_sha256}" in l for l in res_img_done)
+
+        # Cleanup
         send_line(c3, "LOGOUT")
         recv_line(c3)
         c3.close()
 
         c1.close()
-        print("\n>>> ALL TESTS (MILESTONE 1, 2 & 3) PASSED SUCCESSFULLY! <<<")
+        print("\n>>> ALL TESTS (MILESTONES 1, 2, 3 & 4) PASSED SUCCESSFULLY! <<<")
 
     finally:
         srv.terminate()
@@ -238,4 +330,5 @@ def run_tests():
 
 if __name__ == '__main__':
     run_tests()
+
 

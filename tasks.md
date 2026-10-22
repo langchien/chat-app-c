@@ -1,6 +1,6 @@
 # Danh Sách Tasks Triển Khai Chat C
 
-> **Tiến độ tổng quan:** 11/19 tasks hoàn thành (58%)
+> **Tiến độ tổng quan:** 14/19 tasks hoàn thành (74%)
 
 ---
 
@@ -22,9 +22,9 @@
 - [x] Task 3.4: Tải Lịch sử Tin nhắn (Chat History Sync)
 
 ## Giai Đoạn 4: Truyền Tải File & Hình Ảnh Qua C Socket (Milestone 4)
-- [ ] Task 4.1: Thiết kế Giao thức Truyền Chunk & Quản lý Bộ đệm File (`src/server/file_transfer.c`)
-- [ ] Task 4.2: Cơ chế Gửi/Nhận File Đa Nhiệm Không Chặn ở Client (`src/client/net_handler.c`)
-- [ ] Task 4.3: Kiểm tra Toàn vẹn File (SHA-256) & Xem Ảnh Trực Tiếp Trên Terminal
+- [x] Task 4.1: Thiết kế Giao thức Truyền Chunk & Quản lý Bộ đệm File (`src/server/file_transfer.c`)
+- [x] Task 4.2: Cơ chế Gửi/Nhận File Đa Nhiệm Không Chặn ở Client (`src/client/net_handler.c`)
+- [x] Task 4.3: Kiểm tra Toàn vẹn File (SHA-256) & Xem Ảnh Trực Tiếp Trên Terminal
 
 ## Giai Đoạn 5: Giao Diện Liên Tục (Continuous UI / TUI) (Milestone 5)
 - [ ] Task 5.1: Thiết kế Bố cục Cửa sổ với `ncurses` / Raw Terminal (`src/client/ui_continuous.c`)

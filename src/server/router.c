@@ -524,15 +524,19 @@ void handle_command(ClientSession *session, char *cmd_line) {
         return;
     }
 
-    /* ---- Typing indicator command (Task 2.5 / 3.2) ---- */
-    if (strcasecmp(cmd, CMD_TYPING) == 0) {
-        char target[MAX_NAME_LEN] = {0};
-        if (sscanf(rest, "%31s", target) == 1) {
-            ClientSession *recip = find_client_by_name(target);
-            if (recip) {
-                send_to_fd(recip->sockfd, "%s %s", EVENT_TYPING, session->username);
-            }
-        }
+    /* ---- File & image transfer commands (Task 4.1) ---- */
+    if (strcasecmp(cmd, CMD_FILE_INIT) == 0) {
+        handle_file_init(session, rest);
+        return;
+    }
+
+    if (strcasecmp(cmd, CMD_FILE_CHUNK) == 0) {
+        handle_file_chunk(session, rest);
+        return;
+    }
+
+    if (strcasecmp(cmd, CMD_FILE_END) == 0) {
+        handle_file_end(session, rest);
         return;
     }
 

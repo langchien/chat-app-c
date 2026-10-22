@@ -54,6 +54,8 @@ void show_help(void) {
         printf("  %s/groups%s                 : Xem danh sách các nhóm đang hoạt động\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/members <nhóm>%s         : Xem danh sách thành viên trong nhóm\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/history <user/nhóm> [n]%s : Xem lịch sử tin nhắn lưu trữ từ SQLite3\n", COLOR_BOLD, COLOR_RESET);
+        printf("  %s/sendfile <target> <đường_dẫn>%s : Gửi file đa nhiệm không chặn tới user hoặc nhóm\n", COLOR_BOLD, COLOR_RESET);
+        printf("  %s/sendimg <target> <đường_dẫn>%s  : Gửi ảnh nhị phân & hiển thị thumbnail trên terminal\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/logout%s                 : Đăng xuất tài khoản\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/help%s                   : Hiển thị lại hướng dẫn này\n", COLOR_BOLD, COLOR_RESET);
         printf("  %s/quit%s                   : Thoát chương trình\n", COLOR_BOLD, COLOR_RESET);
@@ -218,6 +220,35 @@ void handle_server_line(char *line) {
     } else if (strncmp(line, EVENT_TYPING " ", strlen(EVENT_TYPING) + 1) == 0) {
         char *sender = line + strlen(EVENT_TYPING) + 1;
         printf("\r\033[K%s... '%s' đang soạn tin nhắn ...%s\n", COLOR_BLUE, sender, COLOR_RESET);
+    } else if (strncmp(line, RESP_OK " " RESP_FILE_READY " ", strlen(RESP_OK " " RESP_FILE_READY " ")) == 0) {
+        char transfer_id[MAX_TRANSFER_ID_LEN] = {0};
+        int chunk_size = MAX_CHUNK_SIZE;
+        sscanf(line + strlen(RESP_OK " " RESP_FILE_READY " "), "%31s %d", transfer_id, &chunk_size);
+        on_file_ready(transfer_id, chunk_size);
+    } else if (strncmp(line, RESP_FILE_INCOMING " ", strlen(RESP_FILE_INCOMING) + 1) == 0) {
+        char transfer_id[MAX_TRANSFER_ID_LEN] = {0};
+        char sender[MAX_NAME_LEN] = {0};
+        char filename[MAX_FILENAME_LEN] = {0};
+        long filesize = 0;
+        char sha256[SHA256_HEX_LEN + 1] = {0};
+        int is_image = 0;
+        sscanf(line + strlen(RESP_FILE_INCOMING) + 1, "%31s %31s %127s %ld %64s %d",
+               transfer_id, sender, filename, &filesize, sha256, &is_image);
+        on_file_incoming(transfer_id, sender, filename, filesize, sha256, is_image != 0);
+    } else if (strncmp(line, RESP_FILE_CHUNK " ", strlen(RESP_FILE_CHUNK) + 1) == 0) {
+        char transfer_id[MAX_TRANSFER_ID_LEN] = {0};
+        int seq_num = 0;
+        int offset = 0;
+        char *payload = line + strlen(RESP_FILE_CHUNK) + 1;
+        if (sscanf(payload, "%31s %d%n", transfer_id, &seq_num, &offset) >= 2) {
+            char *b64_data = trim_whitespace(payload + offset);
+            on_file_chunk(transfer_id, seq_num, b64_data);
+        }
+    } else if (strncmp(line, RESP_FILE_DONE " ", strlen(RESP_FILE_DONE) + 1) == 0) {
+        char transfer_id[MAX_TRANSFER_ID_LEN] = {0};
+        char sha256[SHA256_HEX_LEN + 1] = {0};
+        sscanf(line + strlen(RESP_FILE_DONE) + 1, "%31s %64s", transfer_id, sha256);
+        on_file_done(transfer_id, sha256);
     } else if (strncmp(line, RESP_OK, strlen(RESP_OK)) == 0) {
         char *detail = line + strlen(RESP_OK);
         if (*detail == ' ') detail++;
@@ -431,6 +462,50 @@ void handle_user_input(char *raw_input) {
             char buf[128];
             snprintf(buf, sizeof(buf), "%s %s %d", CMD_HISTORY, target, limit);
             send_to_server(buf);
+            return;
+        }
+
+        if (strcasecmp(cmd, "/sendfile") == 0) {
+            char target[MAX_NAME_LEN] = {0};
+            char filepath[256] = {0};
+            char *space_pos = strchr(rest, ' ');
+            if (space_pos) {
+                size_t tlen = (size_t)(space_pos - rest);
+                if (tlen >= sizeof(target)) tlen = sizeof(target) - 1;
+                strncpy(target, rest, tlen);
+                target[tlen] = '\0';
+                strncpy(filepath, trim_whitespace(space_pos + 1), sizeof(filepath) - 1);
+            } else if (strlen(g_chat_partner) > 0) {
+                safe_copy(target, g_chat_partner, sizeof(target));
+                strncpy(filepath, rest, sizeof(filepath) - 1);
+            } else {
+                printf("%s[LỖI] Cú pháp: /sendfile <user/nhóm> <đường_dẫn_file>%s\n", COLOR_RED, COLOR_RESET);
+                print_prompt();
+                return;
+            }
+            start_file_send(target, filepath, false);
+            return;
+        }
+
+        if (strcasecmp(cmd, "/sendimg") == 0) {
+            char target[MAX_NAME_LEN] = {0};
+            char filepath[256] = {0};
+            char *space_pos = strchr(rest, ' ');
+            if (space_pos) {
+                size_t tlen = (size_t)(space_pos - rest);
+                if (tlen >= sizeof(target)) tlen = sizeof(target) - 1;
+                strncpy(target, rest, tlen);
+                target[tlen] = '\0';
+                strncpy(filepath, trim_whitespace(space_pos + 1), sizeof(filepath) - 1);
+            } else if (strlen(g_chat_partner) > 0) {
+                safe_copy(target, g_chat_partner, sizeof(target));
+                strncpy(filepath, rest, sizeof(filepath) - 1);
+            } else {
+                printf("%s[LỖI] Cú pháp: /sendimg <user/nhóm> <đường_dẫn_ảnh>%s\n", COLOR_RED, COLOR_RESET);
+                print_prompt();
+                return;
+            }
+            start_file_send(target, filepath, true);
             return;
         }
 

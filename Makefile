@@ -11,7 +11,7 @@ LDFLAGS = -lpthread
 
 # Source files
 COMMON_SRC   = src/common/protocol.c src/common/crypto_utils.c
-SERVER_SRC   = src/server/main.c src/server/session.c src/server/router.c src/server/database.c
+SERVER_SRC   = src/server/main.c src/server/session.c src/server/router.c src/server/database.c src/server/file_transfer.c
 CLIENT_SRC   = src/client/main.c src/client/net_handler.c src/client/ui_continuous.c
 
 # Object files

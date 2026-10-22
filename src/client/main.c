@@ -80,16 +80,31 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         fd_set read_fds;
+        fd_set write_fds;
         FD_ZERO(&read_fds);
+        FD_ZERO(&write_fds);
         FD_SET(STDIN_FILENO, &read_fds);
         FD_SET(g_sockfd, &read_fds);
 
+        if (g_send_job.active) {
+            FD_SET(g_sockfd, &write_fds);
+        }
+
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = g_send_job.active ? 10000 : 500000; /* 10ms when transmitting file */
+
         int max_fd = (g_sockfd > STDIN_FILENO) ? g_sockfd : STDIN_FILENO;
-        int activity = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+        int activity = select(max_fd + 1, &read_fds, g_send_job.active ? &write_fds : NULL, NULL, &tv);
         if (activity < 0) {
             if (errno == EINTR) continue;
             perror("select");
             break;
+        }
+
+        /* 0. Send next file chunk if socket is ready for writing (Task 4.2) */
+        if (g_send_job.active && FD_ISSET(g_sockfd, &write_fds)) {
+            send_next_file_chunk();
         }
 
         /* 1. Data received from server */

@@ -110,6 +110,7 @@ int main(int argc, char *argv[]) {
 
     /* Initialize global state */
     init_sessions();
+    init_file_transfers();
 
     /* Task 2.1: Initialize SQLite3 database */
     if (db_init(DB_PATH) != 0) {
