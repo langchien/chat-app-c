@@ -10,8 +10,8 @@ CFLAGS  = -Wall -Wextra -Werror -g -O2 -I include
 LDFLAGS = -lpthread
 
 # Source files
-COMMON_SRC   = src/common/protocol.c
-SERVER_SRC   = src/server/main.c src/server/session.c src/server/router.c
+COMMON_SRC   = src/common/protocol.c src/common/crypto_utils.c
+SERVER_SRC   = src/server/main.c src/server/session.c src/server/router.c src/server/database.c
 CLIENT_SRC   = src/client/main.c src/client/net_handler.c src/client/ui_continuous.c
 
 # Object files
@@ -23,15 +23,19 @@ CLIENT_OBJ   = $(CLIENT_SRC:.c=.o)
 SERVER_BIN   = server
 CLIENT_BIN   = client
 
+# Libraries
+SERVER_LIBS  = -lpthread -lsqlite3
+CLIENT_LIBS  = -lpthread
+
 # ---- Build targets ----
 
 all: $(SERVER_BIN) $(CLIENT_BIN)
 
 $(SERVER_BIN): $(COMMON_OBJ) $(SERVER_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(SERVER_LIBS)
 
 $(CLIENT_BIN): $(COMMON_OBJ) $(CLIENT_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(CLIENT_LIBS)
 
 # Compile .c -> .o
 %.o: %.c

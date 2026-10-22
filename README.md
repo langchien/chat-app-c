@@ -7,8 +7,11 @@ Yêu cầu chức năng mạng:
 - Chuyển tiếp tin nhắn một-một và phát tin tới mọi thành viên của nhóm.
 - Thông báo cho bên còn lại khi một phía ngắt kết nối hoặc dừng cuộc trò chuyện.
 - Xác thực người dùng: Yêu cầu tên đăng nhập và mật khẩu.
-- **[Mới]** Cơ chế Heartbeat (PING/PONG) phát hiện Half-Open Connection.
-- **[Mới]** Graceful Shutdown – Bắt SIGINT để đóng tất cả kết nối an toàn.
+- **[Mới - M1]** Cơ chế Heartbeat (PING/PONG) phát hiện Half-Open Connection.
+- **[Mới - M1]** Graceful Shutdown – Bắt SIGINT để đóng tất cả kết nối an toàn.
+- **[Mới - M2]** Lưu trữ cơ sở dữ liệu nhúng SQLite3 (`storage/chat_server.db`) với chế độ WAL.
+- **[Mới - M2]** Bảo mật mật khẩu: Băm SHA-256 kết hợp Salt ngẫu nhiên 16 bytes.
+- **[Mới - M2]** 100% Prepared Statements chống tấn công SQL Injection.
 
 ---
 
@@ -16,29 +19,35 @@ Yêu cầu chức năng mạng:
 
 ```
 chat-app/
-├── Makefile                    # Biên dịch đa module (-Wall -Wextra -Werror -g -O2)
+├── Makefile                    # Biên dịch đa module (-Wall -Wextra -Werror -g -O2 -lsqlite3 -lpthread)
 ├── include/
 │   ├── protocol.h              # Định nghĩa lệnh, mã lỗi, hằng số giao thức
 │   ├── server.h                # Cấu trúc ClientSession, Group, hàm API server
+│   ├── database.h              # API giao tiếp CSDL SQLite3
+│   ├── crypto_utils.h          # API SHA-256 và sinh Salt mật khẩu
 │   └── client_ui.h             # Hàm giao diện client, mã màu ANSI
 ├── src/
 │   ├── common/
-│   │   └── protocol.c          # Hàm tiện ích dùng chung (safe_copy, trim_whitespace)
+│   │   ├── protocol.c          # Hàm tiện ích dùng chung (safe_copy, trim_whitespace)
+│   │   └── crypto_utils.c      # Cài đặt SHA-256 (FIPS 180-2) + Salt 16 bytes
 │   ├── server/
 │   │   ├── main.c              # Khởi tạo Server, select() loop, Heartbeat, Graceful shutdown
-│   │   ├── session.c           # Quản lý kết nối, tài khoản, disconnect_client()
-│   │   └── router.c            # Định tuyến lệnh, chat 1-1, nhóm, PONG handling
+│   │   ├── session.c           # Quản lý kết nối, presence, disconnect_client()
+│   │   ├── router.c            # Định tuyến lệnh, chat 1-1, nhóm, xác thực DB
+│   │   └── database.c          # Khởi tạo schema SQLite3, Prepared Statements, Seed mẫu
 │   └── client/
 │       ├── main.c              # Khởi tạo Client, select() multiplexing stdin & socket
 │       ├── net_handler.c       # Gửi gói tin tới server
 │       └── ui_continuous.c     # Hiển thị ANSI, xử lý input, tự động PONG
 ├── storage/
-│   └── README.md               # Placeholder cho DB/file storage (Milestone 2+)
+│   ├── chat_server.db          # File SQLite3 CSDL (tự sinh lúc chạy server)
+│   └── README.md               # Mô tả thư mục lưu trữ
 ├── tests/
 │   └── test_chatapp.py         # Script kiểm thử tự động
 ├── README.md                   # Hướng dẫn sử dụng
 ├── issue.md                    # Phân tích vấn đề mạng
-└── KE_HOACH_TRIEN_KHAI_CHAT_C.md  # Kế hoạch triển khai chi tiết
+├── plan_tasks.md               # Kế hoạch triển khai chi tiết
+└── tasks.md                    # Danh sách theo dõi tiến độ
 ```
 
 ---

@@ -1,8 +1,8 @@
 # Build artifacts
 *.o
 *.exe
-server
-client
+/server
+/client
 
 # Storage (runtime data)
 storage/chat_server.db

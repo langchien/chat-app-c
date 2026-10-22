@@ -9,8 +9,9 @@ SERVER_PORT = 9988
 SERVER_CMD = ["./server", str(SERVER_PORT)]
 
 def start_server():
-    p = subprocess.Popen(SERVER_CMD, cwd="./chat-app", stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    time.sleep(0.5)
+    cwd = "." if os.path.exists("./server") or os.path.exists("./Makefile") else "./chat-app"
+    p = subprocess.Popen(SERVER_CMD, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    time.sleep(0.6)
     return p
 
 def connect_client():
@@ -36,7 +37,7 @@ def recv_line(s, timeout=1.0):
     return lines
 
 def run_tests():
-    print(">>> Starting Chat Server...")
+    print(">>> Starting Chat Server (Milestone 2 - SQLite3 & Auth)...")
     srv = start_server()
 
     try:
@@ -46,25 +47,48 @@ def run_tests():
         print("C1 received on connect:", lines1)
         assert any("Welcome" in l for l in lines1), "Expected welcome message"
 
-        # Test 2: Invalid login
+        # Test 2.1: Unauthenticated command guard (Task 2.3 / Milestone 2)
+        send_line(c1, "MSG alice Hello")
+        res_unauth = recv_line(c1)
+        print("C1 unauthenticated MSG response:", res_unauth)
+        assert any("Please login first" in l for l in res_unauth), "Expected 'Please login first'"
+
+        send_line(c1, "JOIN test_group")
+        res_unauth2 = recv_line(c1)
+        print("C1 unauthenticated JOIN response:", res_unauth2)
+        assert any("Please login first" in l for l in res_unauth2), "Expected 'Please login first'"
+
+        # Test 2.2: Invalid login
         send_line(c1, "LOGIN alice wrongpassword")
         res = recv_line(c1)
         print("C1 invalid login res:", res)
         assert any("ERROR" in l for l in res), "Expected ERROR on wrong pass"
 
-        # Test 3: Successful login
+        # Test 3: Successful login with seeded SQLite account
         send_line(c1, "LOGIN alice 123456")
         res = recv_line(c1)
         print("C1 login res:", res)
         assert any("LOGIN_OK" in l for l in res), "Expected LOGIN_OK"
 
-        # Test 4: Register new user and duplicate login test
+        # Test 3.1: Already logged in on current session
+        send_line(c1, "LOGIN bob 123456")
+        res_already = recv_line(c1)
+        print("C1 re-login on same session:", res_already)
+        assert any("Already logged in" in l for l in res_already), "Expected Already logged in"
+
+        # Test 4: Register new user (Task 2.1/2.2: SHA-256 + Salt in SQLite3)
         c2 = connect_client()
         recv_line(c2) # welcome
         send_line(c2, "REGISTER eve password123")
         res = recv_line(c2)
         print("C2 register res:", res)
         assert any("OK" in l for l in res), "Expected OK on register"
+
+        # Duplicate register test
+        send_line(c2, "REGISTER eve password123")
+        res_dup_reg = recv_line(c2)
+        print("C2 duplicate register res:", res_dup_reg)
+        assert any("already exists" in l for l in res_dup_reg), "Expected already exists error"
 
         # Duplicate login test: C2 tries to login as alice
         send_line(c2, "LOGIN alice 123456")
@@ -99,7 +123,6 @@ def run_tests():
 
         send_line(c2, "JOIN group_test")
         print("C2 join group_test:", recv_line(c2))
-        # C1 gets notification that eve joined group
         print("C1 saw eve joined group:", recv_line(c1))
 
         # Send group message from C2
@@ -126,6 +149,12 @@ def run_tests():
         print("C1 received after C2 disconnect:", res_c1_disc)
         assert any("User 'eve' has disconnected." in l for l in res_c1_disc), "Expected disconnect notice"
         assert any("EVENT_OFFLINE eve" in l for l in res_c1_disc), "Expected offline event"
+
+        # Test 9: Logout test (Task 2.3)
+        send_line(c1, "LOGOUT")
+        res_logout = recv_line(c1)
+        print("C1 logout res:", res_logout)
+        assert any("Logged out" in l for l in res_logout), "Expected Logged out"
 
         c1.close()
         print("\n>>> ALL TESTS PASSED SUCCESSFULLY! <<<")

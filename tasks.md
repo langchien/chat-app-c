@@ -1,6 +1,6 @@
 # Danh Sách Tasks Triển Khai Chat C
 
-> **Tiến độ tổng quan:** 4/19 tasks hoàn thành (21%)
+> **Tiến độ tổng quan:** 7/19 tasks hoàn thành (37%)
 
 ---
 
@@ -11,9 +11,9 @@
 - [x] Task 1.4: Cơ chế Heartbeat & Bắt Tín Hiệu Hệ Thống (Keep-Alive & Graceful Shutdown)
 
 ## Giai Đoạn 2: Xác Thực Cơ Sở Dữ Liệu & Bảo Mật (Milestone 2)
-- [ ] Task 2.1: Thiết kế Schema & Tích hợp SQLite3 C API (`src/server/database.c`)
-- [ ] Task 2.2: Băm Mật Khẩu & Chống SQL Injection (`src/common/crypto_utils.c`)
-- [ ] Task 2.3: Quản lý Phiên Xác Thực & Chống Đăng Nhập Trùng (`REGISTER`, `LOGIN`, `LOGOUT`)
+- [x] Task 2.1: Thiết kế Schema & Tích hợp SQLite3 C API (`src/server/database.c`)
+- [x] Task 2.2: Băm Mật Khẩu & Chống SQL Injection (`src/common/crypto_utils.c`)
+- [x] Task 2.3: Quản lý Phiên Xác Thực & Chống Đăng Nhập Trùng (`REGISTER`, `LOGIN`, `LOGOUT`)
 
 ## Giai Đoạn 3: Hiện Diện Thời Gian Thực, Chat 1-1, Chat Nhóm & Lịch Sử (Milestone 3)
 - [ ] Task 3.1: Hệ thống Quản lý Hiện diện Thời gian thực (Realtime Presence Push)

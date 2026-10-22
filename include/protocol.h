@@ -15,7 +15,7 @@
 #define MAX_GROUP_MEMBERS       64
 #define MAX_MSG_LEN             2048
 #define DEFAULT_PORT            8080
-#define ACCOUNTS_FILE           "users.txt"
+#define DB_PATH                 "storage/chat_server.db"
 
 /* Heartbeat / Keep-alive settings (Task 1.4) */
 #define HEARTBEAT_INTERVAL_SEC  15   /* Server sends PING every 15 seconds     */

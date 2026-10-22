@@ -2,21 +2,12 @@
 #define SERVER_H
 
 #include "protocol.h"
+#include "database.h"
+#include "crypto_utils.h"
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <time.h>
-
-/* ============================================================
- * Account representation (flat-file based, to be replaced by
- * SQLite3 in Milestone 2)
- * ============================================================ */
-typedef struct {
-    char username[MAX_NAME_LEN];
-    char password[MAX_PASS_LEN];
-} Account;
-
-#define MAX_ACCOUNTS 256
 
 /* ============================================================
  * Client session – one per connected TCP socket
@@ -48,8 +39,6 @@ typedef struct {
 /* ============================================================
  * Global state (extern declarations)
  * ============================================================ */
-extern Account       g_accounts[MAX_ACCOUNTS];
-extern int           g_account_count;
 extern ClientSession g_clients[MAX_CLIENTS];
 extern Group         g_groups[MAX_GROUPS];
 extern volatile sig_atomic_t g_running;   /* Graceful shutdown flag */
@@ -69,12 +58,15 @@ void   disconnect_client(int index);
 void   handle_command(ClientSession *session, char *cmd_line);
 
 /* ============================================================
- * Account helpers (defined in session.c for now)
+ * Account helpers (wrappers around database.h)
  * ============================================================ */
-void   load_accounts(void);
-void   save_account(const char *user, const char *pass);
-bool   user_exists(const char *user);
-bool   authenticate_user(const char *user, const char *pass);
+static inline bool user_exists(const char *user) {
+    return db_user_exists(user);
+}
+
+static inline bool authenticate_user(const char *user, const char *pass) {
+    return db_authenticate_user(user, pass);
+}
 
 /* ============================================================
  * Group helpers (defined in router.c)
