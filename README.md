@@ -103,18 +103,25 @@ Ví dụ:
 ### Chạy Client:
 Cú pháp:
 ```bash
-./client [server_ip] [port]
+./client [server_ip] [port] [--raw | --simple-cli]
 ```
+- **Chế độ Mặc định (Continuous TUI):** Tự động kích hoạt giao diện TUI chia khung chuyên nghiệp khi chạy trong Terminal (Khung chat 75%, Sidebar online/nhóm 25%, Status bar hiển thị tiến trình gửi nhận file, Input Box độc lập không bị trôi chữ khi có tin nhắn mới). Hỗ trợ phím Tab tự điền lệnh/username, mũi tên trái/phải, phím Delete, PgUp/PgDn cuộn tin nhắn.
+- **Chế độ CLI thuần (`--raw` hoặc `--simple-cli`):** Chạy ở chế độ dòng lệnh chuẩn đơn giản, hữu ích khi chạy pipe, test tự động bằng script hoặc terminal hạn chế.
+
 Ví dụ kết nối trên localhost:
 ```bash
 ./client 127.0.0.1 8080
+```
+Hoặc chạy chế độ đơn giản:
+```bash
+./client 127.0.0.1 8080 --raw
 ```
 
 ---
 
 ## 3. Hướng dẫn Sử dụng Lệnh Phía Client
 
-Client hỗ trợ giao diện dòng lệnh trực quan với màu sắc ANSI để dễ dàng phân biệt tin nhắn riêng, tin nhóm và thông báo hệ thống.
+Client hỗ trợ giao diện phân chia khung liên tục (Continuous TUI) với màu sắc ANSI TrueColor để dễ dàng phân biệt tin nhắn riêng, tin nhóm, ảnh thumbnail và thông báo hệ thống.
 
 ### Khi chưa đăng nhập:
 - `/register <tên_đăng_nhập> <mật_khẩu>`: Đăng ký tài khoản mới.

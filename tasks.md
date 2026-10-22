@@ -1,6 +1,6 @@
 # Danh Sách Tasks Triển Khai Chat C
 
-> **Tiến độ tổng quan:** 14/19 tasks hoàn thành (74%)
+> **Tiến độ tổng quan:** 17/19 tasks hoàn thành (89%)
 
 ---
 
@@ -27,9 +27,9 @@
 - [x] Task 4.3: Kiểm tra Toàn vẹn File (SHA-256) & Xem Ảnh Trực Tiếp Trên Terminal
 
 ## Giai Đoạn 5: Giao Diện Liên Tục (Continuous UI / TUI) (Milestone 5)
-- [ ] Task 5.1: Thiết kế Bố cục Cửa sổ với `ncurses` / Raw Terminal (`src/client/ui_continuous.c`)
-- [ ] Task 5.2: Xử lý Nhập liệu Bất đồng bộ (Non-blocking Keystroke Handler)
-- [ ] Task 5.3: Chế độ Tương thích CLI (`--headless` / `--simple-cli`)
+- [x] Task 5.1: Thiết kế Bố cục Cửa sổ với Pure ANSI / Raw Terminal (`src/client/ui_continuous.c`)
+- [x] Task 5.2: Xử lý Nhập liệu Bất đồng bộ (Non-blocking Keystroke Handler)
+- [x] Task 5.3: Chế độ Tương thích CLI (`--headless` / `--simple-cli`)
 
 ## Giai Đoạn 6: Kiểm Thử Tự Động & Đóng Gói (Milestone 6)
 - [ ] Task 6.1: Mở rộng Bộ Kiểm Thử Tự Động (`tests/test_chatapp_v2.py`)

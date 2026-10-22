@@ -19,8 +19,32 @@ extern int   g_sockfd;
 extern char  g_username[MAX_NAME_LEN];
 extern char  g_chat_partner[MAX_NAME_LEN];
 extern bool  g_logged_in;
+extern bool  g_tui_enabled;
 
-/* UI functions (ui_continuous.c – currently basic CLI) */
+/* ============================================================
+ * Continuous TUI / Terminal Interface (Milestone 5)
+ * ============================================================ */
+#define MAX_CHAT_HISTORY   500
+#define MAX_ONLINE_USERS   128
+#define MAX_GROUPS_TRACK   64
+
+void   ui_init(bool force_tui);
+void   ui_cleanup(void);
+void   ui_add_message(const char *msg);
+void   ui_add_message_fmt(const char *fmt, ...);
+void   ui_update_online_users(const char *user_list_str);
+void   ui_add_online_user(const char *username);
+void   ui_remove_online_user(const char *username);
+void   ui_update_groups(const char *group_list_str);
+void   ui_add_group(const char *groupname);
+void   ui_remove_group(const char *groupname);
+void   ui_update_status(void);
+void   ui_redraw_all(void);
+void   ui_process_key(void);
+void   ui_scroll_up(int lines);
+void   ui_scroll_down(int lines);
+
+/* Legacy CLI / Common UI functions */
 void   print_prompt(void);
 void   show_help(void);
 void   handle_server_line(char *line);

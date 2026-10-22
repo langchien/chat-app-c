@@ -4,10 +4,12 @@
  *
  * Task 4.2: Non-blocking Chunk-based File Sending & Receiving.
  * Task 4.3: SHA-256 Integrity Verification & Terminal Image Viewer.
+ * Task 5.1/5.2: TUI-aware message routing and progress updates.
  * ============================================================ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -49,17 +51,15 @@ void start_file_send(const char *target, const char *filepath, bool is_image) {
     if (!target || !filepath) return;
 
     if (g_send_job.active) {
-        printf("%s[LỖI] Đang có một tiến trình gửi file khác đang diễn ra. Vui lòng đợi hoàn tất.%s\n",
-               COLOR_RED, COLOR_RESET);
-        print_prompt();
+        ui_add_message_fmt("%s[LỖI] Đang có một tiến trình gửi file khác đang diễn ra. Vui lòng đợi hoàn tất.%s",
+                           COLOR_RED, COLOR_RESET);
         return;
     }
 
     FILE *fp = fopen(filepath, "rb");
     if (!fp) {
-        printf("%s[LỖI] Không thể mở file '%s' để đọc. Vui lòng kiểm tra đường dẫn.%s\n",
-               COLOR_RED, filepath, COLOR_RESET);
-        print_prompt();
+        ui_add_message_fmt("%s[LỖI] Không thể mở file '%s' để đọc. Vui lòng kiểm tra đường dẫn.%s",
+                           COLOR_RED, filepath, COLOR_RESET);
         return;
     }
 
@@ -68,25 +68,22 @@ void start_file_send(const char *target, const char *filepath, bool is_image) {
     fseek(fp, 0, SEEK_SET);
 
     if (size <= 0) {
-        printf("%s[LỖI] File '%s' rỗng (0 bytes).%s\n", COLOR_RED, filepath, COLOR_RESET);
+        ui_add_message_fmt("%s[LỖI] File '%s' rỗng (0 bytes).%s", COLOR_RED, filepath, COLOR_RESET);
         fclose(fp);
-        print_prompt();
         return;
     }
 
     if (size > MAX_FILE_SIZE) {
-        printf("%s[LỖI] Dung lượng file (%ld bytes) vượt quá giới hạn cho phép (50MB).%s\n",
-               COLOR_RED, size, COLOR_RESET);
+        ui_add_message_fmt("%s[LỖI] Dung lượng file (%ld bytes) vượt quá giới hạn cho phép (50MB).%s",
+                           COLOR_RED, size, COLOR_RESET);
         fclose(fp);
-        print_prompt();
         return;
     }
 
     char sha256_hex[SHA256_HEX_LEN + 1];
     if (sha256_file(filepath, sha256_hex) != 0) {
-        printf("%s[LỖI] Không thể tính mã băm SHA-256 cho file '%s'.%s\n", COLOR_RED, filepath, COLOR_RESET);
+        ui_add_message_fmt("%s[LỖI] Không thể tính mã băm SHA-256 cho file '%s'.%s", COLOR_RED, filepath, COLOR_RESET);
         fclose(fp);
-        print_prompt();
         return;
     }
 
@@ -108,8 +105,8 @@ void start_file_send(const char *target, const char *filepath, bool is_image) {
     strncpy(g_send_job.filename, basename, sizeof(g_send_job.filename) - 1);
     strncpy(g_send_job.sha256, sha256_hex, sizeof(g_send_job.sha256) - 1);
 
-    printf("%s[KHỞI TẠO] Đang gửi yêu cầu truyền %s '%s' (%ld bytes) tới '%s' (SHA-256: %.8s...)...%s\n",
-           COLOR_CYAN, is_image ? "ảnh" : "file", basename, size, target, sha256_hex, COLOR_RESET);
+    ui_add_message_fmt("%s[KHỞI TẠO] Đang gửi yêu cầu truyền %s '%s' (%ld bytes) tới '%s' (SHA-256: %.8s...)...%s",
+                       COLOR_CYAN, is_image ? "ảnh" : "file", basename, size, target, sha256_hex, COLOR_RESET);
 
     /* Send FILE_INIT to server */
     char init_cmd[BUFFER_SIZE];
@@ -126,9 +123,9 @@ void on_file_ready(const char *transfer_id, int chunk_size) {
     }
     g_send_job.active = true;
 
-    printf("\r\033[K%s[TRUYỀN TẢI] Máy chủ đã sẵn sàng (Session: %s). Đang bắt đầu gửi các phân đoạn dữ liệu...%s\n",
-           COLOR_GREEN, transfer_id, COLOR_RESET);
-    print_prompt();
+    ui_add_message_fmt("%s[TRUYỀN TẢI] Máy chủ đã sẵn sàng (Session: %s). Đang bắt đầu gửi các phân đoạn dữ liệu...%s",
+                       COLOR_GREEN, transfer_id, COLOR_RESET);
+    ui_update_status();
 }
 
 void send_next_file_chunk(void) {
@@ -153,12 +150,7 @@ void send_next_file_chunk(void) {
         g_send_job.bytes_sent += (long)bytes_read;
         g_send_job.seq_num++;
 
-        int pct = (int)((g_send_job.bytes_sent * 100) / g_send_job.filesize);
-        if (pct % 25 == 0 || g_send_job.bytes_sent >= g_send_job.filesize) {
-            printf("\r\033[K%s[TIẾN ĐỘ TẢI LÊN] Đang gửi '%s': [%d%%] (%ld/%ld bytes)%s",
-                   COLOR_CYAN, g_send_job.filename, pct, g_send_job.bytes_sent, g_send_job.filesize, COLOR_RESET);
-            fflush(stdout);
-        }
+        ui_update_status();
     }
 
     /* Finished sending all bytes */
@@ -171,9 +163,9 @@ void send_next_file_chunk(void) {
         g_send_job.fp = NULL;
         g_send_job.active = false;
 
-        printf("\n%s[HOÀN TẤT GỬI] Đã tải lên toàn bộ %ld bytes cho file '%s'. Đang đợi xác nhận từ máy chủ...%s\n",
-               COLOR_GREEN, g_send_job.filesize, g_send_job.filename, COLOR_RESET);
-        print_prompt();
+        ui_add_message_fmt("%s[HOÀN TẤT GỬI] Đã tải lên toàn bộ %ld bytes cho file '%s'. Đang đợi xác nhận từ máy chủ...%s",
+                           COLOR_GREEN, g_send_job.filesize, g_send_job.filename, COLOR_RESET);
+        ui_update_status();
     }
 }
 
@@ -206,17 +198,16 @@ void on_file_incoming(const char *transfer_id, const char *sender, const char *f
 
     g_recv_job.fp = fopen(g_recv_job.filepath_part, "wb");
     if (!g_recv_job.fp) {
-        printf("\r\033[K%s[LỖI] Không thể tạo file đệm '%s' để lưu dữ liệu tải về.%s\n",
-               COLOR_RED, g_recv_job.filepath_part, COLOR_RESET);
-        print_prompt();
+        ui_add_message_fmt("%s[LỖI] Không thể tạo file đệm '%s' để lưu dữ liệu tải về.%s",
+                           COLOR_RED, g_recv_job.filepath_part, COLOR_RESET);
         return;
     }
 
     g_recv_job.active = true;
 
-    printf("\r\033[K%s[FILE ĐẾN] Đang nhận %s '%s' (%ld bytes) từ '%s'...%s\n",
-           COLOR_MAGENTA, is_image ? "ẢNH" : "FILE", filename, filesize, sender, COLOR_RESET);
-    print_prompt();
+    ui_add_message_fmt("%s[FILE ĐẾN] Đang nhận %s '%s' (%ld bytes) từ '%s'...%s",
+                       COLOR_MAGENTA, is_image ? "ẢNH" : "FILE", filename, filesize, sender, COLOR_RESET);
+    ui_update_status();
 }
 
 void on_file_chunk(const char *transfer_id, int seq_num, const char *b64_data) {
@@ -231,6 +222,7 @@ void on_file_chunk(const char *transfer_id, int seq_num, const char *b64_data) {
         fwrite(raw_buf, 1, decoded_len, g_recv_job.fp);
         g_recv_job.received_bytes += (long)decoded_len;
         g_recv_job.seq_num++;
+        ui_update_status();
     }
 }
 
@@ -244,21 +236,20 @@ void on_file_done(const char *transfer_id, const char *sha256) {
     /* Task 4.3: SHA-256 integrity check */
     char calc_sha256[SHA256_HEX_LEN + 1];
     if (sha256_file(g_recv_job.filepath_part, calc_sha256) != 0) {
-        printf("\r\033[K%s[LỖI] Không thể tính mã băm SHA-256 file vừa tải về.%s\n", COLOR_RED, COLOR_RESET);
+        ui_add_message_fmt("%s[LỖI] Không thể tính mã băm SHA-256 file vừa tải về.%s", COLOR_RED, COLOR_RESET);
         remove(g_recv_job.filepath_part);
         g_recv_job.active = false;
-        print_prompt();
+        ui_update_status();
         return;
     }
 
     const char *expected = strlen(sha256) > 0 ? sha256 : g_recv_job.expected_sha256;
     if (strcasecmp(calc_sha256, expected) != 0) {
-        printf("\r\033[K%s[CẢNH BÁO TOÀN VẸN] File '%s' bị sai lệch mã băm SHA-256! "
-               "(Nhận: %.8s..., Kỳ vọng: %.8s...) - File đã bị loại bỏ.%s\n",
-               COLOR_RED, g_recv_job.filename, calc_sha256, expected, COLOR_RESET);
+        ui_add_message_fmt("%s[CẢNH BÁO TOÀN VẸN] File '%s' bị sai lệch mã băm SHA-256! (Nhận: %.8s..., Kỳ vọng: %.8s...) - File đã bị loại bỏ.%s",
+                           COLOR_RED, g_recv_job.filename, calc_sha256, expected, COLOR_RESET);
         remove(g_recv_job.filepath_part);
         g_recv_job.active = false;
-        print_prompt();
+        ui_update_status();
         return;
     }
 
@@ -268,9 +259,9 @@ void on_file_done(const char *transfer_id, const char *sha256) {
         perror("rename");
     }
 
-    printf("\r\033[K%s[TẢI VỀ THÀNH CÔNG] File '%s' (%ld bytes) đã lưu vào '%s' [SHA-256 verified: %.8s...]%s\n",
-           COLOR_GREEN, g_recv_job.filename, g_recv_job.received_bytes,
-           g_recv_job.filepath_final, calc_sha256, COLOR_RESET);
+    ui_add_message_fmt("%s[TẢI VỀ THÀNH CÔNG] File '%s' (%ld bytes) đã lưu vào '%s' [SHA-256: %.8s...]%s",
+                       COLOR_GREEN, g_recv_job.filename, g_recv_job.received_bytes,
+                       g_recv_job.filepath_final, calc_sha256, COLOR_RESET);
 
     /* If it is an image, display preview on terminal */
     if (g_recv_job.is_image) {
@@ -278,15 +269,16 @@ void on_file_done(const char *transfer_id, const char *sha256) {
     }
 
     g_recv_job.active = false;
-    print_prompt();
+    ui_update_status();
 }
 
 /* ============================================================
- * Terminal Image Viewer – Task 4.3
+ * Terminal Image Viewer – Task 4.3 & 5.1
  * Renders thumbnail in ANSI TrueColor / Half-blocks (▀)
  * ============================================================ */
 void render_terminal_image(const char *filepath) {
     if (!filepath) return;
+
     FILE *fp = fopen(filepath, "rb");
     if (!fp) return;
 
@@ -302,14 +294,14 @@ void render_terminal_image(const char *filepath) {
             bool top_down = (height < 0);
             if (height < 0) height = -height;
 
-            printf("\n%s--- [XEM TRƯỚC ẢNH TERMINAL: %s (%dx%d %dbpp)] ---%s\n",
-                   COLOR_CYAN, filepath, width, height, bpp, COLOR_RESET);
+            ui_add_message_fmt("%s--- [XEM TRƯỚC ẢNH TERMINAL: %s (%dx%d %dbpp)] ---%s",
+                               COLOR_CYAN, filepath, width, height, bpp, COLOR_RESET);
 
-            /* Target terminal display size */
-            int target_w = 40;
+            /* Target terminal display size (scaled to fit nicely in chat window) */
+            int target_w = 36;
             if (target_w > width) target_w = width;
             int target_h = (int)((long)height * target_w / width);
-            if (target_h > 24) target_h = 24;
+            if (target_h > 18) target_h = 18;
             if (target_h % 2 != 0) target_h++;
 
             /* Row stride in BMP is padded to 4 bytes */
@@ -320,7 +312,9 @@ void render_terminal_image(const char *filepath) {
                 fread(raw_data, 1, row_stride * height, fp);
 
                 /* Render using ANSI half-blocks (▀): 2 vertical pixels per line */
+                char line_buf[2048];
                 for (int y = 0; y < target_h; y += 2) {
+                    int pos = 0;
                     for (int x = 0; x < target_w; x++) {
                         int src_x = (x * width) / target_w;
                         int src_y1 = top_down ? ((y * height) / target_h) : (height - 1 - ((y * height) / target_h));
@@ -332,14 +326,15 @@ void render_terminal_image(const char *filepath) {
                         uint8_t b1 = raw_data[idx1 + 0], g1 = raw_data[idx1 + 1], r1 = raw_data[idx1 + 2];
                         uint8_t b2 = raw_data[idx2 + 0], g2 = raw_data[idx2 + 1], r2 = raw_data[idx2 + 2];
 
-                        /* ANSI 24-bit TrueColor: foreground top, background bottom */
-                        printf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm▀\033[0m",
-                               r1, g1, b1, r2, g2, b2);
+                        pos += snprintf(line_buf + pos, sizeof(line_buf) - pos,
+                                        "\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm▀\033[0m",
+                                        r1, g1, b1, r2, g2, b2);
+                        if (pos >= (int)sizeof(line_buf) - 64) break;
                     }
-                    printf("\n");
+                    ui_add_message(line_buf);
                 }
                 free(raw_data);
-                printf("%s----------------------------------------------------%s\n\n", COLOR_CYAN, COLOR_RESET);
+                ui_add_message_fmt("%s----------------------------------------------------%s", COLOR_CYAN, COLOR_RESET);
                 fclose(fp);
                 return;
             }
@@ -348,10 +343,10 @@ void render_terminal_image(const char *filepath) {
     fclose(fp);
 
     /* Fallback ASCII Banner for PNG/JPG/other image formats */
-    printf("\n%s┌──────────────────────────────────────────────────┐%s\n", COLOR_CYAN, COLOR_RESET);
-    printf("%s│            [ẢNH NHẬN ĐƯỢC: %-21.21s] │%s\n", COLOR_CYAN, filepath, COLOR_RESET);
-    printf("%s│  🖼  Hình ảnh đã được lưu vào thư mục tải về:   │%s\n", COLOR_CYAN, COLOR_RESET);
-    printf("%s│      %s%-40.40s%s│%s\n", COLOR_CYAN, COLOR_BOLD, filepath, COLOR_RESET, COLOR_CYAN, COLOR_RESET);
-    printf("%s│  (Để xem ảnh kích thước gốc, mở trực tiếp file) │%s\n", COLOR_CYAN, COLOR_RESET);
-    printf("%s└──────────────────────────────────────────────────┘%s\n\n", COLOR_CYAN, COLOR_RESET);
+    ui_add_message_fmt("%s┌──────────────────────────────────────────────────┐%s", COLOR_CYAN, COLOR_RESET);
+    ui_add_message_fmt("%s│            [ẢNH NHẬN ĐƯỢC: %-21.21s] │%s", COLOR_CYAN, filepath, COLOR_RESET);
+    ui_add_message_fmt("%s│  🖼  Hình ảnh đã được lưu vào thư mục tải về:   │%s", COLOR_CYAN, COLOR_RESET);
+    ui_add_message_fmt("%s│      %s%-40.40s%s│%s", COLOR_CYAN, COLOR_BOLD, filepath, COLOR_RESET, COLOR_CYAN, COLOR_RESET);
+    ui_add_message_fmt("%s│  (Để xem ảnh kích thước gốc, mở trực tiếp file) │%s", COLOR_CYAN, COLOR_RESET);
+    ui_add_message_fmt("%s└──────────────────────────────────────────────────┘%s", COLOR_CYAN, COLOR_RESET);
 }

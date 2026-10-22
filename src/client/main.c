@@ -1,7 +1,11 @@
 /* ============================================================
  * src/client/main.c
  * Client entry point – TCP connection, select() event loop
- * with STDIN and socket multiplexing.
+ * with STDIN and socket multiplexing, supporting Continuous TUI.
+ *
+ * Task 5.1: Window layout & Continuous TUI
+ * Task 5.2: Non-blocking keystroke handler
+ * Task 5.3: CLI compatibility flag (--raw / --simple-cli)
  * ============================================================ */
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,10 +23,7 @@
 #include "../../include/client_ui.h"
 #include "../../include/protocol.h"
 
-/* ---- Forward declarations from common ---- */
-extern char* trim_whitespace(char *str);
-
-/* ---- Global client state (defined here, declared extern in client_ui.h) ---- */
+/* ---- Global client state ---- */
 int   g_sockfd = -1;
 char  g_username[MAX_NAME_LEN] = "";
 char  g_chat_partner[MAX_NAME_LEN] = "";
@@ -34,15 +35,20 @@ bool  g_logged_in = false;
 int main(int argc, char *argv[]) {
     char server_ip[64] = "127.0.0.1";
     int port = DEFAULT_PORT;
+    bool force_raw = false;
 
-    if (argc >= 2) {
-        strncpy(server_ip, argv[1], sizeof(server_ip) - 1);
-    }
-    if (argc >= 3) {
-        port = atoi(argv[2]);
-        if (port <= 0 || port > 65535) {
-            fprintf(stderr, "Port không hợp lệ: %s\n", argv[2]);
-            return EXIT_FAILURE;
+    /* Parse command-line arguments */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--raw") == 0 || strcmp(argv[i], "--simple-cli") == 0 || strcmp(argv[i], "--headless") == 0) {
+            force_raw = true;
+        } else if (i == 1 && argv[i][0] != '-') {
+            strncpy(server_ip, argv[1], sizeof(server_ip) - 1);
+        } else if (i == 2 && argv[i][0] != '-') {
+            port = atoi(argv[2]);
+            if (port <= 0 || port > 65535) {
+                fprintf(stderr, "Port không hợp lệ: %s\n", argv[2]);
+                return EXIT_FAILURE;
+            }
         }
     }
 
@@ -64,16 +70,29 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    printf("Đang kết nối tới server %s:%d...\n", server_ip, port);
+    if (force_raw) {
+        printf("Đang kết nối tới server %s:%d (Chế độ CLI thuần)...\n", server_ip, port);
+    } else {
+        printf("Đang kết nối tới server %s:%d...\n", server_ip, port);
+    }
+
     if (connect(g_sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("Lỗi kết nối connect()");
         close(g_sockfd);
         return EXIT_FAILURE;
     }
 
-    printf("%sĐã kết nối thành công tới server!%s\n", COLOR_GREEN, COLOR_RESET);
-    show_help();
-    print_prompt();
+    /* Initialize UI (TUI or Simple CLI) */
+    if (!force_raw && isatty(STDIN_FILENO)) {
+        ui_init(true);
+        ui_add_message_fmt("%sĐã kết nối thành công tới server %s:%d!%s", COLOR_GREEN, server_ip, port, COLOR_RESET);
+        show_help();
+    } else {
+        ui_init(false);
+        printf("%sĐã kết nối thành công tới server!%s\n", COLOR_GREEN, COLOR_RESET);
+        show_help();
+        print_prompt();
+    }
 
     char recv_buf[BUFFER_SIZE];
     int recv_len = 0;
@@ -92,7 +111,7 @@ int main(int argc, char *argv[]) {
 
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = g_send_job.active ? 10000 : 500000; /* 10ms when transmitting file */
+        tv.tv_usec = g_send_job.active ? 10000 : 50000; /* 10ms when transmitting file, 50ms otherwise */
 
         int max_fd = (g_sockfd > STDIN_FILENO) ? g_sockfd : STDIN_FILENO;
         int activity = select(max_fd + 1, &read_fds, g_send_job.active ? &write_fds : NULL, NULL, &tv);
@@ -116,7 +135,11 @@ int main(int argc, char *argv[]) {
             }
             ssize_t bytes_read = recv(g_sockfd, recv_buf + recv_len, space, 0);
             if (bytes_read <= 0) {
-                printf("\n%s[MẤT KẾT NỐI] Máy chủ đã ngắt kết nối hoặc dừng hoạt động.%s\n", COLOR_RED, COLOR_RESET);
+                if (g_tui_enabled) {
+                    ui_add_message_fmt("%s[MẤT KẾT NỐI] Máy chủ đã ngắt kết nối hoặc dừng hoạt động.%s", COLOR_RED, COLOR_RESET);
+                } else {
+                    printf("\n%s[MẤT KẾT NỐI] Máy chủ đã ngắt kết nối hoặc dừng hoạt động.%s\n", COLOR_RED, COLOR_RESET);
+                }
                 break;
             }
 
@@ -142,24 +165,34 @@ int main(int argc, char *argv[]) {
 
                 handle_server_line(line);
             }
+
+            if (!g_tui_enabled) {
+                print_prompt();
+            }
         }
 
         /* 2. User input from keyboard */
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
-            char user_line[BUFFER_SIZE];
-            if (fgets(user_line, sizeof(user_line), stdin) == NULL) {
-                /* EOF (Ctrl+D) */
-                printf("\nĐang thoát...\n");
-                send_to_server(CMD_QUIT);
-                break;
+            if (g_tui_enabled) {
+                /* Non-blocking character/escape-sequence reading */
+                ui_process_key();
+            } else {
+                /* Line-buffered reading for CLI mode */
+                char user_line[BUFFER_SIZE];
+                if (fgets(user_line, sizeof(user_line), stdin) == NULL) {
+                    /* EOF (Ctrl+D) */
+                    printf("\nĐang thoát...\n");
+                    send_to_server(CMD_QUIT);
+                    break;
+                }
+                user_line[strcspn(user_line, "\r\n")] = 0;
+                handle_user_input(user_line);
+                print_prompt();
             }
-
-            /* Remove newline character */
-            user_line[strcspn(user_line, "\r\n")] = 0;
-            handle_user_input(user_line);
         }
     }
 
+    ui_cleanup();
     close(g_sockfd);
     return EXIT_SUCCESS;
 }
