@@ -5,6 +5,7 @@
 #include "database.h"
 #include "crypto_utils.h"
 #include <stdbool.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <time.h>
